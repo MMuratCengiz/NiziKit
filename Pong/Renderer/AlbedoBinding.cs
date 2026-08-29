@@ -7,13 +7,13 @@ using Pong.Entities;
 
 namespace Pong.Renderer;
 
-public class AlbedoBinding(BindGroupLayout layout, TextureStore textureStore, Sampler sampler) : ShaderBinding<RenderObject>(layout)
+public class AlbedoBinding(BindGroupLayout layout, TextureStore textureStore, Sampler sampler) : ShaderBinding<SceneObject>(layout)
 {
     private readonly ConstantBuffer<Vector4> _colorBuffer = new();
 
     public override bool RequiresCycling => true;
 
-    protected override void OnUpdate(RenderObject target)
+    protected override void OnUpdate(SceneObject target)
     {
         _colorBuffer.Write(target.Color);
 

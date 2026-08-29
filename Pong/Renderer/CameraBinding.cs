@@ -1,4 +1,5 @@
-﻿using System.Numerics;
+using System.Numerics;
+using NiziKit.Graphics;
 using DenOfIz;
 using NiziKit.Graphics.Binding;
 using NiziKit.Graphics.Buffers;

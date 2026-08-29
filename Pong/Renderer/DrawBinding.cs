@@ -6,7 +6,7 @@ using Pong.Entities;
 
 namespace Pong.Renderer;
 
-public class DrawBinding(BindGroupLayout layout) : ShaderBinding<RenderObject>(layout)
+public class DrawBinding(BindGroupLayout layout) : ShaderBinding<SceneObject>(layout)
 {
     private readonly ConstantBuffer<Matrix4x4> _dataBuffer = new();
 
@@ -30,7 +30,7 @@ public class DrawBinding(BindGroupLayout layout) : ShaderBinding<RenderObject>(l
         }
     }
 
-    protected override void OnUpdate(RenderObject target)
+    protected override void OnUpdate(SceneObject target)
     {
         var model = Matrix4x4.CreateScale(target.Size.X, target.Size.Y, 1)
                     * Matrix4x4.CreateFromQuaternion(target.Rotation)

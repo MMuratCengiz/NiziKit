@@ -1,4 +1,3 @@
-using System.Numerics;
 using DenOfIz;
 using NiziKit.Graphics;
 using NiziKit.Graphics.Renderer;
@@ -20,8 +19,6 @@ public class QuadRenderer : IDisposable
     private readonly List<DrawBinding> _drawBindings = [];
     private readonly List<AlbedoBinding> _albedoBindings = [];
 
-    private readonly List<RenderObject> _renderObjects = [];
-
     private readonly BatchResourceCopy _batchCopy = new(new BatchResourceCopyDesc
     {
         Device = GraphicsContext.Device
@@ -29,6 +26,7 @@ public class QuadRenderer : IDisposable
 
     private readonly QuadVertexBuffer _vertexBuffer = new();
     private readonly TextureStore _textureStore = new();
+    private readonly Scene _scene;
 
     private readonly Sampler _sampler = GraphicsContext.Device.CreateSampler(new SamplerDesc
     {
@@ -40,15 +38,11 @@ public class QuadRenderer : IDisposable
         MipmapMode = MipmapMode.Linear
     });
 
-    private Camera _camera = new()
-    {
-        ViewMatrix = Matrix4x4.Identity,
-        ProjectionMatrix = Matrix4x4.Identity,
-        ViewProjectionMatrix = Matrix4x4.Identity
-    };
+    private Camera _camera = new();
 
-    public QuadRenderer()
+    public QuadRenderer(Scene scene)
     {
+        _scene = scene;
         _renderFrame = new RenderFrame();
         _sceneColor = CycledTexture.ColorAttachment("SceneColor2D");
         _sceneDepth = CycledTexture.DepthAttachment("SceneDepth2D");
@@ -84,7 +78,7 @@ public class QuadRenderer : IDisposable
 
         pass.BindVertexBuffer(_vertexBuffer.Buffer, 0, 0);
 
-        foreach (var renderObject in _renderObjects)
+        foreach (var renderObject in _scene)
         {
             EnsureBindings(renderObject.Id);
 
@@ -100,7 +94,7 @@ public class QuadRenderer : IDisposable
         }
 
         pass.End();
-
+        
         _renderFrame.Submit();
         _renderFrame.Present(_sceneColor);
     }
@@ -117,16 +111,6 @@ public class QuadRenderer : IDisposable
     public void SetCamera(Camera camera)
     {
         _camera = camera;
-    }
-
-    public void AddRenderObject(RenderObject renderObject)
-    {
-        _renderObjects.Add(renderObject);
-    }
-
-    public void ClearRenderObjects()
-    {
-        _renderObjects.Clear();
     }
 
     public void Dispose()

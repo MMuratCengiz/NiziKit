@@ -2,12 +2,9 @@ using System.Numerics;
 
 namespace Pong.Entities;
 
-public struct RenderObject()
+public class SceneObject(int id)
 {
-    private static int _uid = 0;
-
-    // Simple game so we are getting away with it, do not do this in high object count scenarios or you will burn ids
-    public readonly int Id = _uid++;
+    public readonly int Id = id;
 
     public string AssetPath = "";
 
