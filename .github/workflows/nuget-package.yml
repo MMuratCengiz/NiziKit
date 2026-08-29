@@ -1,0 +1,77 @@
+name: Build NuGet Package
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Publish to NuGet.org'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  pack:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read version from version.txt
+        run: echo "VERSION=$(cat version.txt | tr -d '[:space:]')" >> $GITHUB_ENV
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Pack
+        run: dotnet pack NiziKit/NiziKit.csproj -c Release -o NuGet_Out -p:Version=$VERSION
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuget-packages
+          path: NuGet_Out/*.nupkg
+
+      - name: Publish to GitHub Packages
+        run: |
+          dotnet nuget push "NuGet_Out/*.nupkg" \
+            --api-key ${{ secrets.GITHUB_TOKEN }} \
+            --source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" \
+            --skip-duplicate
+
+  publish-nuget:
+    if: ${{ github.event.inputs.publish == 'true' }}
+    needs: pack
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Download packages
+        uses: actions/download-artifact@v4
+        with:
+          name: nuget-packages
+          path: NuGet_Out
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: NuGet login (trusted publishing)
+        uses: NuGet/login@v1
+        id: nuget-login
+        with:
+          user: MMuratCengiz
+
+      - name: Publish to NuGet.org
+        run: |
+          dotnet nuget push "NuGet_Out/*.nupkg" \
+            --api-key ${{ steps.nuget-login.outputs.NUGET_API_KEY }} \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate

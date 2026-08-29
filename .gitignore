@@ -7,6 +7,11 @@
 ##
 ## Get latest from https://github.com/github/gitignore/blob/main/Dotnet.gitignore
 
+# LLMs
+.claude
+CLAUDE.MD
+AGENTS.MD
+
 # Build results
 [Dd]ebug/
 [Dd]ebugPublic/
@@ -36,9 +41,6 @@ ScaffoldingReadMe.txt
 # NuGet Symbol Packages
 *.snupkg
 
-# dotenv environment variables file
-.env
-
 # Others
 ~$*
 *~
@@ -55,3 +57,10 @@ CodeCoverage/
 *.VisualState.xml
 TestResult.xml
 nunit-*.xml
+
+.idea
+
+.vs/
+
+# NuGet pack output
+NuGet_Out/

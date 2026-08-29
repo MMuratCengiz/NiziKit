@@ -1,0 +1,14 @@
+<Project>
+  <PropertyGroup>
+    <Version Condition="'$(Version)' == ''">0.1.0-alpha</Version>
+    <Authors>Murat Cengiz</Authors>
+    <Company>Den Of Iz</Company>
+    <PackageLicenseExpression>GPL-3.0-only</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/MMuratCengiz/NiziKit</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/MMuratCengiz/NiziKit.git</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageTags>game-engine;graphics;DirectX12;Vulkan;Metal;rendering;3D;game-development;DenOfIz</PackageTags>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+</Project>

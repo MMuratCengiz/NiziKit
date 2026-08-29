@@ -1,0 +1,164 @@
+using System.Runtime.CompilerServices;
+using DenOfIz;
+using NiziKit.Application.Timing;
+using NiziKit.Application.Windowing;
+using NiziKit.Core;
+using NiziKit.Graphics;
+using NiziKit.Graphics.Binding;
+using NiziKit.Inputs;
+
+namespace NiziKit.Application;
+
+public class Game : IDisposable
+{
+    private static Game? _instance;
+    public static Game Instance => _instance ?? throw new InvalidOperationException("Game not initialized");
+
+    private readonly FixedTimestep _fixedTimestep;
+    private readonly Time _time;
+    private readonly GraphicsContext _graphics;
+    private readonly GpuBinding _gpuBinding;
+
+    public AppWindow Window { get; }
+
+    /// <summary>
+    /// The DenOfIz input system instance. Needed for the per-player controller API
+    /// (<see cref="DenOfIz.InputSystem.OpenController"/>, <see cref="DenOfIz.InputSystem.GetControllerAxisValue"/>, rumble);
+    /// keyboard and mouse state is available through its static members.
+    /// </summary>
+    public InputSystem InputSystem { get; }
+
+    public bool IsRunning { get; set; }
+
+    public static void Run<TGame>(GameDesc? desc = null) where TGame : Game
+    {
+        if (_instance != null)
+        {
+            throw new InvalidOperationException(
+                "A game is already running. Only one game instance is allowed per process.");
+        }
+
+        Log.Initialize();
+        DenOfIzRuntime.Initialize();
+        Engine.Init(new EngineDesc());
+        using var game = (TGame)Activator.CreateInstance(typeof(TGame), desc)!;
+        game.Run();
+    }
+
+    protected Game(GameDesc? desc = null)
+    {
+        desc ??= new GameDesc();
+        _fixedTimestep = new FixedTimestep(desc.FixedUpdateRate);
+
+        var windowFlags = new WindowFlags
+        {
+            Resizable = desc.Resizable,
+            Maximized = desc.Maximized,
+            Borderless = desc.Borderless,
+            Fullscreen = desc.Fullscreen
+        };
+        Window = new AppWindow(desc.Title, desc.Width, desc.Height, windowFlags);
+
+        _time = new Time();
+        InputSystem = new InputSystem();
+        _graphics = new GraphicsContext(Window.NativeWindow, desc.Graphics);
+        _gpuBinding = new GpuBinding();
+
+        _instance = this;
+    }
+
+    protected virtual void Load(Game game) { }
+    protected virtual void FixedUpdate(float fixedDt) { }
+    protected virtual void Update(float dt) { }
+    protected virtual void Render(float dt) { }
+    protected virtual void OnResize(uint width, uint height) { }
+    protected virtual void OnEvent(ref Event ev) { }
+    protected virtual void OnShutdown() { }
+
+    private void Run()
+    {
+        Window.Show();
+        Load(this);
+
+        IsRunning = true;
+        Time.Start();
+
+        while (IsRunning)
+        {
+            RunFrame();
+        }
+
+        OnShutdown();
+    }
+
+    public void Quit()
+    {
+        IsRunning = false;
+    }
+
+    public void Dispose()
+    {
+        _instance = null;
+        _gpuBinding.Dispose();
+        _graphics.Dispose();
+        InputSystem.Dispose();
+        Window.Dispose();
+        Engine.Shutdown();
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void RunFrame()
+    {
+        Time.Tick();
+        ProcessEvents();
+
+        if (!IsRunning)
+        {
+            return;
+        }
+
+        if (Window.IsMinimized)
+        {
+            return;
+        }
+
+        var fixedSteps = _fixedTimestep.Accumulate(Time.UnscaledDeltaTime);
+        for (var i = 0; i < fixedSteps; i++)
+        {
+            FixedUpdate((float)_fixedTimestep.FixedDeltaTime);
+        }
+
+        Update(Time.DeltaTime);
+        Render(Time.DeltaTime);
+    }
+
+    private void ProcessEvents()
+    {
+        Input.BeginFrame();
+
+        while (InputSystem.PollEvent(out var ev))
+        {
+            Input.ProcessEvent(ref ev);
+            if (ev.Type == EventType.Quit)
+            {
+                IsRunning = false;
+                return;
+            }
+
+            if (ev.Type == EventType.WindowEvent)
+            {
+                Window.HandleWindowEvent(ev.Window.Event, ev.Window.Data1, ev.Window.Data2);
+
+                if (ev.Window.Event == WindowEventType.SizeChanged)
+                {
+                    var width = (uint)ev.Window.Data1;
+                    var height = (uint)ev.Window.Data2;
+                    GraphicsContext.Resize(width, height);
+                    OnResize(width, height);
+                }
+            }
+
+            OnEvent(ref ev);
+        }
+    }
+}

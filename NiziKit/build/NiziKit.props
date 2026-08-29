@@ -1,0 +1,18 @@
+<Project>
+  <ItemGroup>
+    <Using Include="DenOfIz" />
+    <Using Include="NiziKit.Application" />
+    <Using Include="NiziKit.Application.Timing" />
+    <Using Include="NiziKit.Application.Windowing" />
+    <Using Include="NiziKit.Core" />
+    <Using Include="NiziKit.Graphics" />
+    <Using Include="NiziKit.Graphics.Binding" />
+    <Using Include="NiziKit.Graphics.Buffers" />
+    <Using Include="NiziKit.Graphics.Recording" />
+    <Using Include="NiziKit.Graphics.Renderer" />
+    <Using Include="NiziKit.Graphics.Renderer.Pass" />
+    <Using Include="NiziKit.Graphics.Resources" />
+    <Using Include="NiziKit.Inputs" />
+    <Using Include="NiziKit.UI" />
+  </ItemGroup>
+</Project>

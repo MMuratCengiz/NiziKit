@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net9.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <RootNamespace>NiziKit</RootNamespace>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <IsPackable>true</IsPackable>
+        <PackageId>NiziKit</PackageId>
+        <Description>A thin managed layer over the DenOfIz graphics library: window management, input, game loop, and graphics helpers (passes, bindings, buffers) for building your own renderer on DirectX12, Vulkan, and Metal.</Description>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <PackageReference Include="DenOfIzGraphics" Version="0.10.0-alpha" />
+      <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.0" />
+      <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="9.0.0" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <None Include="..\README.md" Pack="true" PackagePath="\" Visible="false" />
+      <None Include="build\NiziKit.props" Pack="true" PackagePath="build\;buildTransitive\" />
+    </ItemGroup>
+
+</Project>
