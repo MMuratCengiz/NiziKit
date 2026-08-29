@@ -2,10 +2,11 @@
 using DenOfIz;
 using NiziKit.Graphics.Binding;
 using NiziKit.Graphics.Buffers;
+using Pong.Entities;
 
 namespace Pong.Renderer;
 
-public class ModelBinding(BindGroupLayout layout) : ShaderBinding<RenderObject>(layout)
+public class DrawBinding(BindGroupLayout layout) : ShaderBinding<RenderObject>(layout)
 {
     private readonly ConstantBuffer<Matrix4x4> _dataBuffer = new();
 
@@ -31,7 +32,10 @@ public class ModelBinding(BindGroupLayout layout) : ShaderBinding<RenderObject>(
 
     protected override void OnUpdate(RenderObject target)
     {
-        var model = Matrix4x4.CreateTranslation(target.Position.X, target.Position.Y, 1);
+        var model = Matrix4x4.CreateScale(target.Size.X, target.Size.Y, 1)
+                    * Matrix4x4.CreateFromQuaternion(target.Rotation)
+                    * Matrix4x4.CreateTranslation(target.Position.X, target.Position.Y, 1);
+
         _dataBuffer.Write(model);
     }
 }

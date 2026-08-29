@@ -20,7 +20,7 @@ public sealed class GraphicsContext : IDisposable
     public static CommandQueue GraphicsCommandQueue => Instance._graphicsQueue;
     public static CommandQueue ComputeCommandQueue => Instance._computeQueue;
     public static CommandQueue CopyCommandQueue => Instance._copyQueue;
-
+    public static Texture NullTexture => Instance._nullTexture;
     public static uint NumFrames => Instance._numFrames;
     public static Format BackBufferFormat => Instance._backBufferFormat;
     public static Format DepthBufferFormat => Instance._depthBufferFormat;
@@ -53,6 +53,7 @@ public sealed class GraphicsContext : IDisposable
     private uint _width;
     private uint _height;
     private readonly UniformBufferArena _uniformBufferArena;
+    private readonly Texture _nullTexture;
 
     private bool _resizePending;
     private uint _pendingWidth;
@@ -104,6 +105,19 @@ public sealed class GraphicsContext : IDisposable
 
         _uniformBufferArena = new UniformBufferArena(_logicalDevice);
         _instance = this;
+        var textureDesc = new TextureDesc
+        {
+            Width = 1,
+            Height = 1,
+            Depth = 1,
+            ArraySize = 1,
+            MipLevels = 1,
+            Format = Format.R8G8B8A8Unorm,
+            Usage = (uint)TextureUsageFlagBits.TextureBinding,
+            HeapType = HeapType.Gpu,
+            DebugName = StringView.Intern("ImGui Null Texture")
+        };
+        _nullTexture = _logicalDevice.CreateTexture(textureDesc);
     }
 
     public GraphicsContext(GraphicsDesc? desc = null)

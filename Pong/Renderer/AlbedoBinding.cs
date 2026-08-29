@@ -1,44 +1,42 @@
+using System.Numerics;
 using DenOfIz;
 using NiziKit.Graphics;
 using NiziKit.Graphics.Binding;
+using NiziKit.Graphics.Buffers;
+using Pong.Entities;
 
 namespace Pong.Renderer;
 
-public class AlbedoBinding(BindGroupLayout layout, TextureStore textureStore) : ShaderBinding<RenderObject>(layout)
+public class AlbedoBinding(BindGroupLayout layout, TextureStore textureStore, Sampler sampler) : ShaderBinding<RenderObject>(layout)
 {
-    private readonly Sampler _sampler = GraphicsContext.Device.CreateSampler(new SamplerDesc
-    {
-        AddressModeU = SamplerAddressMode.Repeat,
-        AddressModeV = SamplerAddressMode.Repeat,
-        AddressModeW = SamplerAddressMode.Repeat,
-        MinFilter = Filter.Linear,
-        MagFilter = Filter.Linear,
-        MipmapMode = MipmapMode.Linear
-    });
+    private readonly ConstantBuffer<Vector4> _colorBuffer = new();
 
-    private int _lastHash;
+    public override bool RequiresCycling => true;
 
     protected override void OnUpdate(RenderObject target)
     {
-        var hash = HashCode.Combine(target.AssetPath, target.Position);
+        _colorBuffer.Write(target.Color);
 
-        if (hash == _lastHash)
-        {
-            return;
-        }
+        var texture = string.IsNullOrEmpty(target.AssetPath)
+            ? GraphicsContext.NullTexture
+            : textureStore.GetTexture(target.AssetPath);
 
-        _lastHash = hash;
-
-        var bg = BindGroups[0];
+        var bg = BindGroup;
         bg.BeginUpdate();
-        bg.SrvTexture(0, textureStore.GetTexture(target.AssetPath));
-        bg.Sampler(1, _sampler);
+        bg.SrvTexture(0, texture);
+        bg.CbvWithDesc(new BindBufferDesc
+        {
+            Binding = 1,
+            Resource = _colorBuffer.Buffer,
+            ResourceOffset = _colorBuffer.Offset
+        });
+        bg.Sampler(1, sampler);
         bg.EndUpdate();
     }
 
     public override void Dispose()
     {
-        _sampler.Dispose();
+        _colorBuffer.Dispose();
         base.Dispose();
     }
 }

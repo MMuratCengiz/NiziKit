@@ -1,5 +1,6 @@
 using System.Numerics;
 using NiziKit.Application;
+using Pong.Entities;
 using Pong.Renderer;
 
 namespace Pong;
@@ -7,20 +8,28 @@ namespace Pong;
 public class PongGame : Game
 {
     private QuadRenderer _renderer = null!;
-    
-    public PongGame(GameDesc? desc) : base(desc) {}
-    
+
+    public PongGame(GameDesc? desc) : base(desc)
+    {
+    }
+
     protected override void Load(Game game)
     {
         _renderer = new QuadRenderer();
-        
+
         _renderer.AddTexture("Assets/Textures/Fighter.png");
         _renderer.Load();
-        
+
         _renderer.AddRenderObject(new RenderObject()
         {
             AssetPath = "Assets/Textures/Fighter.png",
             Position = new Vector2(0.5f, 0.5f),
+        });
+
+        _renderer.AddRenderObject(new RenderObject()
+        {
+            Color = new Vector4(0.67f, 0.58f, 0.0f, 1.0f),
+            Position = new Vector2(0.25f, 0.0f),
         });
     }
 
