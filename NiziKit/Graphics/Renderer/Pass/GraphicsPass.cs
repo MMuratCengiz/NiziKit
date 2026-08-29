@@ -70,17 +70,9 @@ public class GraphicsPass(CommandList commandList) : RenderPass(commandList)
         }
     }
 
-    /// <summary>
-    /// The swapchain image index acquired by the last SetSwapChainRenderTarget call. Pass this to
-    /// GraphicsContext.SwapChain.Present — it is not necessarily equal to the frame index.
-    /// </summary>
     public uint SwapChainImageIndex { get; private set; }
 
-    /// <summary>
-    /// Acquires the next swapchain image, sets it as render target 0, and transitions it to the
-    /// Present state when the pass ends. Follow the submit with
-    /// GraphicsContext.SwapChain.Present(pass.SwapChainImageIndex).
-    /// </summary>
+
     public void SetSwapChainRenderTarget(Vector4 clearColor = default, LoadOp loadOp = LoadOp.Clear, StoreOp storeOp = StoreOp.Store)
     {
         var imageIndex = GraphicsContext.SwapChain.AcquireNextImage();
@@ -90,10 +82,6 @@ public class GraphicsPass(CommandList commandList) : RenderPass(commandList)
         SwapChainImageIndex = imageIndex;
     }
 
-    /// <summary>
-    /// Sets a raw texture (e.g. the swapchain image) as a render target. Width/height are needed
-    /// for the default viewport/scissor; for the swapchain pass GraphicsContext.Width/Height.
-    /// </summary>
     public void SetRenderTarget(int slot, Texture texture, uint width, uint height, Vector4 clearColor = default,
         LoadOp loadOp = LoadOp.Clear, StoreOp storeOp = StoreOp.Store)
     {
