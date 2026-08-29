@@ -8,7 +8,7 @@ public class PongGame : Game
 {
     private QuadRenderer _renderer = null!;
     
-    public PongGame(GameDesc? desc) {}
+    public PongGame(GameDesc? desc) : base(desc) {}
     
     protected override void Load(Game game)
     {
@@ -32,5 +32,10 @@ public class PongGame : Game
     protected override void Render(float dt)
     {
         _renderer.Render(dt);
+    }
+
+    protected override void OnShutdown()
+    {
+        _renderer.Dispose();
     }
 }

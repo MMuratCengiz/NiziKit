@@ -1,4 +1,4 @@
-﻿using DenOfIz;
+using DenOfIz;
 using NiziKit.Graphics;
 using NiziKit.Graphics.Binding;
 
@@ -26,12 +26,19 @@ public class AlbedoBinding(BindGroupLayout layout, TextureStore textureStore) : 
         {
             return;
         }
+
         _lastHash = hash;
-        
+
         var bg = BindGroups[0];
         bg.BeginUpdate();
         bg.SrvTexture(0, textureStore.GetTexture(target.AssetPath));
         bg.Sampler(1, _sampler);
         bg.EndUpdate();
+    }
+
+    public override void Dispose()
+    {
+        _sampler.Dispose();
+        base.Dispose();
     }
 }

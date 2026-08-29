@@ -19,6 +19,25 @@ public class QuadPipeline : IDisposable
     
     public Pipeline Instance => _instance;
 
+    // Register spaces used by Assets/Shaders/Quad.*.hlsl. Keep these as regular
+    // descriptor-table spaces: DenOfIz's root-level buffer space (30) is not
+    // bound at the correct root parameter index on DX12.
+    private const uint ViewProjectionSpace = 0;
+    private const uint AlbedoSpace = 1;
+    private const uint ModelSpace = 2;
+
+    private static BindGroupLayoutDesc LayoutForSpace(BindGroupLayoutDesc[] descs, uint registerSpace)
+    {
+        foreach (var desc in descs)
+        {
+            if (desc.RegisterSpace == registerSpace)
+            {
+                return desc;
+            }
+        }
+
+        throw new InvalidOperationException($"Shader reflection has no bind group for register space {registerSpace}");
+    }
 
     public QuadPipeline()
     {
@@ -44,9 +63,9 @@ public class QuadPipeline : IDisposable
         var reflection = _shaderProgram.Reflect();
         _inputLayout = GraphicsContext.Device.CreateInputLayout(reflection.InputLayout);
         var bindGroupLayoutDescs = reflection.BindGroupLayouts.ToArray();
-        _viewProjectionBindGroupLayout = GraphicsContext.Device.CreateBindGroupLayout(bindGroupLayoutDescs[0]);
-        _albedoBindGroupLayout = GraphicsContext.Device.CreateBindGroupLayout(bindGroupLayoutDescs[1]);
-        _modelBindGroupLayout = GraphicsContext.Device.CreateBindGroupLayout(bindGroupLayoutDescs[2]);
+        _viewProjectionBindGroupLayout = GraphicsContext.Device.CreateBindGroupLayout(LayoutForSpace(bindGroupLayoutDescs, ViewProjectionSpace));
+        _albedoBindGroupLayout = GraphicsContext.Device.CreateBindGroupLayout(LayoutForSpace(bindGroupLayoutDescs, AlbedoSpace));
+        _modelBindGroupLayout = GraphicsContext.Device.CreateBindGroupLayout(LayoutForSpace(bindGroupLayoutDescs, ModelSpace));
         
         _rootSignature = GraphicsContext.Device.CreateRootSignature(new RootSignatureDesc
         {

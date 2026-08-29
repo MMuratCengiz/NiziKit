@@ -1,8 +1,8 @@
-﻿using DenOfIz;
+using DenOfIz;
 
 namespace Pong.Renderer;
 
-public class TextureStore
+public class TextureStore : IDisposable
 {
     private readonly IDictionary<string, Texture> _textures = new Dictionary<string, Texture>();
     private readonly List<string> _pending = [];
@@ -23,5 +23,14 @@ public class TextureStore
     public Texture GetTexture(string path)
     {
         return _textures[path];
+    }
+
+    public void Dispose()
+    {
+        foreach (var texture in _textures.Values)
+        {
+            texture.Dispose();
+        }
+        _textures.Clear();
     }
 }
