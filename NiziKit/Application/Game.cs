@@ -21,11 +21,6 @@ public class Game : IDisposable
 
     public AppWindow Window { get; }
 
-    /// <summary>
-    /// The DenOfIz input system instance. Needed for the per-player controller API
-    /// (<see cref="DenOfIz.InputSystem.OpenController"/>, <see cref="DenOfIz.InputSystem.GetControllerAxisValue"/>, rumble);
-    /// keyboard and mouse state is available through its static members.
-    /// </summary>
     public InputSystem InputSystem { get; }
 
     public bool IsRunning { get; set; }
@@ -67,13 +62,33 @@ public class Game : IDisposable
         _instance = this;
     }
 
-    protected virtual void Load(Game game) { }
-    protected virtual void FixedUpdate(float fixedDt) { }
-    protected virtual void Update(float dt) { }
-    protected virtual void Render(float dt) { }
-    protected virtual void OnResize(uint width, uint height) { }
-    protected virtual void OnEvent(ref Event ev) { }
-    protected virtual void OnShutdown() { }
+    protected virtual void Load(Game game)
+    {
+    }
+
+    protected virtual void FixedUpdate(float fixedDt)
+    {
+    }
+
+    protected virtual void Update(float dt)
+    {
+    }
+
+    protected virtual void Render(float dt)
+    {
+    }
+
+    protected virtual void OnResize(uint width, uint height)
+    {
+    }
+
+    protected virtual void OnEvent(ref Event ev)
+    {
+    }
+
+    protected virtual void OnShutdown()
+    {
+    }
 
     private void Run()
     {
