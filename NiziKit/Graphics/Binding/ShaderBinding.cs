@@ -5,7 +5,7 @@ namespace NiziKit.Graphics.Binding;
 public abstract class ShaderBinding<TTarget> : IShaderBinding
 {
     public Type TargetType => typeof(TTarget);
-    public abstract BindGroupLayout Layout { get; }
+    public BindGroupLayout Layout { get; }
     public virtual bool RequiresCycling => false;
 
     protected int NumBindGroups => RequiresCycling ? (int)GraphicsContext.NumFrames : 1;
@@ -13,8 +13,9 @@ public abstract class ShaderBinding<TTarget> : IShaderBinding
 
     public BindGroup BindGroup => RequiresCycling ? BindGroups[GraphicsContext.FrameIndex] : BindGroups[0];
 
-    protected ShaderBinding()
+    protected ShaderBinding(BindGroupLayout layout)
     {
+        Layout = layout ?? throw new ArgumentNullException(nameof(layout));
         BindGroups = new BindGroup[NumBindGroups];
 
         var bindGroupDesc = new BindGroupDesc

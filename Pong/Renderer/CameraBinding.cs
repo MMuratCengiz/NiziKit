@@ -5,18 +5,14 @@ using NiziKit.Graphics.Buffers;
 
 namespace Pong.Renderer;
 
-public class CameraBinding : ShaderBinding<Camera>
+public class CameraBinding(BindGroupLayout layout) : ShaderBinding<Camera>(layout)
 {
     private readonly ConstantBuffer<Matrix4x4> _dataBuffer = new();
 
-    public override BindGroupLayout Layout { get; }
-
     public override bool RequiresCycling => true;
 
-
-    public CameraBinding(BindGroupLayout layout)
+    protected override void OnCreated()
     {
-        Layout = layout;
         for (var i = 0; i < NumBindGroups; i++)
         {
             var dataView = _dataBuffer[i];
@@ -25,7 +21,7 @@ public class CameraBinding : ShaderBinding<Camera>
             bg.BeginUpdate();
             bg.CbvWithDesc(new BindBufferDesc
             {
-                Binding = 0,
+                Binding = 1,
                 Resource = dataView.Buffer,
                 ResourceOffset = dataView.Offset
             });

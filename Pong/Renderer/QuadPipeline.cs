@@ -15,7 +15,7 @@ public class QuadPipeline : IDisposable
 
     public BindGroupLayout ModelBindGroupLayout => _modelBindGroupLayout;
     public BindGroupLayout ViewProjectionBindGroupLayout => _viewProjectionBindGroupLayout;
-    public BindGroupLayout AlbedoBindGroupLayout => _viewProjectionBindGroupLayout;
+    public BindGroupLayout AlbedoBindGroupLayout => _albedoBindGroupLayout;
     
     public Pipeline Instance => _instance;
 

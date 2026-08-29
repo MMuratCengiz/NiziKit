@@ -14,12 +14,12 @@ public class PongGame : Game
     {
         _renderer = new QuadRenderer();
         
-        _renderer.AddTexture("Pong/Assets/Textures/Fighter.png");
+        _renderer.AddTexture("Assets/Textures/Fighter.png");
         _renderer.Load();
         
         _renderer.AddRenderObject(new RenderObject()
         {
-            AssetPath = "Pong/Assets/Textures/Fighter.png",
+            AssetPath = "Assets/Textures/Fighter.png",
             Position = new Vector2(0.5f, 0.5f),
         });
     }

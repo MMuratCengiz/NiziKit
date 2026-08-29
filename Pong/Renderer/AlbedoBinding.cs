@@ -1,20 +1,11 @@
-﻿using System.Numerics;
-using DenOfIz;
+﻿using DenOfIz;
 using NiziKit.Graphics;
 using NiziKit.Graphics.Binding;
-using NiziKit.Graphics.Buffers;
-using NiziKit.Graphics.Resources;
 
 namespace Pong.Renderer;
 
-public class AlbedoBinding(BindGroupLayout layout, TextureStore textureStore) : ShaderBinding<RenderObject>
+public class AlbedoBinding(BindGroupLayout layout, TextureStore textureStore) : ShaderBinding<RenderObject>(layout)
 {
-    public struct Data
-    {
-        public Texture Albedo;
-        public Sampler Sampler;
-    }
-
     private readonly Sampler _sampler = GraphicsContext.Device.CreateSampler(new SamplerDesc
     {
         AddressModeU = SamplerAddressMode.Repeat,
@@ -26,9 +17,6 @@ public class AlbedoBinding(BindGroupLayout layout, TextureStore textureStore) : 
     });
 
     private int _lastHash;
-
-    public override BindGroupLayout Layout { get; } = layout;
-
 
     protected override void OnUpdate(RenderObject target)
     {

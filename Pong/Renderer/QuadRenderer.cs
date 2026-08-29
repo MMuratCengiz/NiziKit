@@ -36,7 +36,6 @@ public class QuadRenderer : IDisposable
         _sceneColor = CycledTexture.ColorAttachment("SceneColor2D");
         _sceneDepth = CycledTexture.DepthAttachment("SceneDepth2D");
         
-        
         _modelBinding = new ModelBinding(_pipeline.ModelBindGroupLayout);
         _cameraBinding = new CameraBinding(_pipeline.ViewProjectionBindGroupLayout);
         _albedoBinding = new AlbedoBinding(_pipeline.AlbedoBindGroupLayout, _textureStore);

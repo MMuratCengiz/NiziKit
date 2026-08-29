@@ -5,18 +5,14 @@ using NiziKit.Graphics.Buffers;
 
 namespace Pong.Renderer;
 
-public class ModelBinding : ShaderBinding<RenderObject>
+public class ModelBinding(BindGroupLayout layout) : ShaderBinding<RenderObject>(layout)
 {
     private readonly ConstantBuffer<Matrix4x4> _dataBuffer = new();
 
-    public override BindGroupLayout Layout { get; }
-
     public override bool RequiresCycling => true;
 
-
-    public ModelBinding(BindGroupLayout layout)
+    protected override void OnCreated()
     {
-        Layout = layout;
         for (var i = 0; i < NumBindGroups; i++)
         {
             var dataView = _dataBuffer[i];
