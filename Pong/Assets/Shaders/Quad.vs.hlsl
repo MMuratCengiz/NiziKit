@@ -4,9 +4,13 @@ struct PSInput
     float2 texCoord : TEXCOORD;
 };
 
-cbuffer MVP : register(b0, space30)
+cbuffer Model : register(b0, space30)
 {
     float4x4 model;
+}
+
+cbuffer ViewProjection : register(b1, space0)
+{
     float4x4 viewProjection;
 }
 

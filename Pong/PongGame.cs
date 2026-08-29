@@ -1,3 +1,4 @@
+using System.Numerics;
 using NiziKit.Application;
 using Pong.Renderer;
 
@@ -12,6 +13,15 @@ public class PongGame : Game
     protected override void Load(Game game)
     {
         _renderer = new QuadRenderer();
+        
+        _renderer.AddTexture("Pong/Assets/Textures/Fighter.png");
+        _renderer.Load();
+        
+        _renderer.AddRenderObject(new RenderObject()
+        {
+            AssetPath = "Pong/Assets/Textures/Fighter.png",
+            Position = new Vector2(0.5f, 0.5f),
+        });
     }
 
     protected override void Update(float dt)

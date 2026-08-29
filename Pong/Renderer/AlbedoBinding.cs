@@ -7,7 +7,7 @@ using NiziKit.Graphics.Resources;
 
 namespace Pong.Renderer;
 
-public class AlbedoBinding(BindGroupLayout layout) : ShaderBinding<AlbedoBinding.Data>
+public class AlbedoBinding(BindGroupLayout layout, TextureStore textureStore) : ShaderBinding<RenderObject>
 {
     public struct Data
     {
@@ -30,11 +30,9 @@ public class AlbedoBinding(BindGroupLayout layout) : ShaderBinding<AlbedoBinding
     public override BindGroupLayout Layout { get; } = layout;
 
 
-    protected override void OnUpdate(Data target)
+    protected override void OnUpdate(RenderObject target)
     {
-        var hash = HashCode.Combine(
-            target.Albedo,
-            target.Sampler);
+        var hash = HashCode.Combine(target.AssetPath, target.Position);
 
         if (hash == _lastHash)
         {
@@ -44,8 +42,8 @@ public class AlbedoBinding(BindGroupLayout layout) : ShaderBinding<AlbedoBinding
         
         var bg = BindGroups[0];
         bg.BeginUpdate();
-        bg.SrvTexture(0, target.Albedo);
-        bg.Sampler(1, target.Sampler);
+        bg.SrvTexture(0, textureStore.GetTexture(target.AssetPath));
+        bg.Sampler(1, _sampler);
         bg.EndUpdate();
     }
 }

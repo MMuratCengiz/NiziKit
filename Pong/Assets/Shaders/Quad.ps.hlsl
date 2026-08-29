@@ -4,8 +4,8 @@ struct PSInput
     float2 texCoord : TEXCOORD;
 };
 
-Texture2D albedo : register(t0, space0);
-SamplerState samplerState : register(s1, space0);
+Texture2D albedo : register(t0, space1);
+SamplerState samplerState : register(s1, space1);
 
 float4 PSMain(PSInput input) : SV_TARGET
 {

@@ -4,18 +4,20 @@ using Buffer = DenOfIz.Buffer;
 
 namespace NiziKit.Graphics.Buffers;
 
-public sealed class UniformBuffer<T> : IDisposable where T : unmanaged
+public sealed class ConstantBuffer<T> : IDisposable where T : unmanaged
 {
     private readonly GpuBufferView[] _views;
     private readonly bool _cycled;
 
-    public UniformBuffer(bool cycled = true)
+    public ConstantBuffer(bool cycled = true, int count = 1)
     {
         _cycled = cycled;
-        var count = cycled ? (int)GraphicsContext.NumFrames : 1;
-        _views = new GpuBufferView[count];
+        var totalCount = cycled ? (int)GraphicsContext.NumFrames : 1;
+        totalCount *= count;
+        
+        _views = new GpuBufferView[totalCount];
 
-        for (var i = 0; i < count; i++)
+        for (var i = 0; i < totalCount; i++)
         {
             _views[i] = GraphicsContext.UniformBufferArena.Request(Marshal.SizeOf<T>());
         }

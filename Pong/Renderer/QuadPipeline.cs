@@ -7,14 +7,15 @@ public class QuadPipeline : IDisposable
 {
     private readonly RootSignature _rootSignature;
     private readonly InputLayout _inputLayout;
-    private readonly BindGroupLayout _mvpBindGroupLayout;
+    private readonly BindGroupLayout _modelBindGroupLayout;
+    private readonly BindGroupLayout _viewProjectionBindGroupLayout;
     private readonly BindGroupLayout _albedoBindGroupLayout;
-    private readonly BindGroupLayout _samplerBindGroupLayout;
     private readonly ShaderProgram _shaderProgram;
     private readonly Pipeline _instance;
 
-    public BindGroupLayout MVPBindGroupLayout => _mvpBindGroupLayout;
-    public BindGroupLayout AlbedoBindGroupLayout => _albedoBindGroupLayout;
+    public BindGroupLayout ModelBindGroupLayout => _modelBindGroupLayout;
+    public BindGroupLayout ViewProjectionBindGroupLayout => _viewProjectionBindGroupLayout;
+    public BindGroupLayout AlbedoBindGroupLayout => _viewProjectionBindGroupLayout;
     
     public Pipeline Instance => _instance;
 
@@ -43,14 +44,14 @@ public class QuadPipeline : IDisposable
         var reflection = _shaderProgram.Reflect();
         _inputLayout = GraphicsContext.Device.CreateInputLayout(reflection.InputLayout);
         var bindGroupLayoutDescs = reflection.BindGroupLayouts.ToArray();
-        _albedoBindGroupLayout = GraphicsContext.Device.CreateBindGroupLayout(bindGroupLayoutDescs[0]);
-        _samplerBindGroupLayout = GraphicsContext.Device.CreateBindGroupLayout(bindGroupLayoutDescs[1]);
-        _mvpBindGroupLayout = GraphicsContext.Device.CreateBindGroupLayout(bindGroupLayoutDescs[2]);
+        _viewProjectionBindGroupLayout = GraphicsContext.Device.CreateBindGroupLayout(bindGroupLayoutDescs[0]);
+        _albedoBindGroupLayout = GraphicsContext.Device.CreateBindGroupLayout(bindGroupLayoutDescs[1]);
+        _modelBindGroupLayout = GraphicsContext.Device.CreateBindGroupLayout(bindGroupLayoutDescs[2]);
         
         _rootSignature = GraphicsContext.Device.CreateRootSignature(new RootSignatureDesc
         {
             BindGroupLayouts =
-                BindGroupLayoutArray.Create([_albedoBindGroupLayout, _samplerBindGroupLayout, _mvpBindGroupLayout,]),
+                BindGroupLayoutArray.Create([_viewProjectionBindGroupLayout, _albedoBindGroupLayout, _modelBindGroupLayout,]),
         });
         var blendDesc = new BlendDesc
         {
@@ -94,9 +95,9 @@ public class QuadPipeline : IDisposable
         _instance.Dispose();
         _inputLayout.Dispose();
         _rootSignature.Dispose();
-        _mvpBindGroupLayout.Dispose();
+        _modelBindGroupLayout.Dispose();
+        _viewProjectionBindGroupLayout.Dispose();
         _albedoBindGroupLayout.Dispose();
-        _samplerBindGroupLayout.Dispose();
         _shaderProgram.Dispose();
     }
 }

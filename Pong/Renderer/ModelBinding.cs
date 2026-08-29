@@ -5,22 +5,16 @@ using NiziKit.Graphics.Buffers;
 
 namespace Pong.Renderer;
 
-public class MvpBinding : ShaderBinding<MvpBinding.Data>
+public class ModelBinding : ShaderBinding<RenderObject>
 {
-    public struct Data
-    {
-        public Matrix4x4 Model;
-        public Matrix4x4 ViewProjection;
-    }
-
-    private readonly UniformBuffer<Data> _dataBuffer = new();
+    private readonly ConstantBuffer<Matrix4x4> _dataBuffer = new();
 
     public override BindGroupLayout Layout { get; }
 
     public override bool RequiresCycling => true;
 
 
-    public MvpBinding(BindGroupLayout layout)
+    public ModelBinding(BindGroupLayout layout)
     {
         Layout = layout;
         for (var i = 0; i < NumBindGroups; i++)
@@ -39,8 +33,9 @@ public class MvpBinding : ShaderBinding<MvpBinding.Data>
         }
     }
 
-    protected override void OnUpdate(Data target)
+    protected override void OnUpdate(RenderObject target)
     {
-        throw new NotImplementedException();
+        var model = Matrix4x4.CreateTranslation(target.Position.X, target.Position.Y, 1);
+        _dataBuffer.Write(model);
     }
 }
