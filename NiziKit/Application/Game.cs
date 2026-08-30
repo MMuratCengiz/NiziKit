@@ -5,7 +5,6 @@ using NiziKit.Application.Windowing;
 using NiziKit.Core;
 using NiziKit.Graphics;
 using NiziKit.Graphics.Binding;
-using NiziKit.Inputs;
 
 namespace NiziKit.Application;
 
@@ -149,11 +148,8 @@ public class Game : IDisposable
 
     private void ProcessEvents()
     {
-        Input.BeginFrame();
-
         while (InputSystem.PollEvent(out var ev))
         {
-            Input.ProcessEvent(ref ev);
             if (ev.Type == EventType.Quit)
             {
                 IsRunning = false;
