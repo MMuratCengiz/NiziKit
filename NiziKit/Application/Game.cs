@@ -11,12 +11,15 @@ namespace NiziKit.Application;
 public class Game : IDisposable
 {
     private static Game? _instance;
+    private static bool _engineInitialized;
+
     public static Game Instance => _instance ?? throw new InvalidOperationException("Game not initialized");
 
     private readonly FixedTimestep _fixedTimestep;
     private readonly Time _time;
     private readonly GraphicsContext _graphics;
     private readonly GpuBinding _gpuBinding;
+    private bool _disposed;
 
     public AppWindow Window { get; }
 
@@ -24,7 +27,26 @@ public class Game : IDisposable
 
     public bool IsRunning { get; set; }
 
-    public static void Run<TGame>(GameDesc? desc = null) where TGame : Game
+    public static void Run<TGame>(Func<TGame> factory) where TGame : Game
+    {
+        TGame game;
+        try
+        {
+            game = factory();
+        }
+        catch
+        {
+            _instance?.Dispose();
+            throw;
+        }
+
+        using (game)
+        {
+            game.Run();
+        }
+    }
+
+    protected Game(GameDesc? desc = null)
     {
         if (_instance != null)
         {
@@ -32,15 +54,8 @@ public class Game : IDisposable
                 "A game is already running. Only one game instance is allowed per process.");
         }
 
-        Log.Initialize();
-        DenOfIzRuntime.Initialize();
-        Engine.Init(new EngineDesc());
-        using var game = (TGame)Activator.CreateInstance(typeof(TGame), desc)!;
-        game.Run();
-    }
+        InitializeEngine();
 
-    protected Game(GameDesc? desc = null)
-    {
         desc ??= new GameDesc();
         _fixedTimestep = new FixedTimestep(desc.FixedUpdateRate);
 
@@ -89,7 +104,7 @@ public class Game : IDisposable
     {
     }
 
-    private void Run()
+    public void Run()
     {
         Window.Show();
         Load(this);
@@ -112,11 +127,42 @@ public class Game : IDisposable
 
     public void Dispose()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
         _instance = null;
-        _gpuBinding.Dispose();
-        _graphics.Dispose();
-        InputSystem.Dispose();
-        Window.Dispose();
+
+        _gpuBinding?.Dispose();
+        _graphics?.Dispose();
+        InputSystem?.Dispose();
+        Window?.Dispose();
+        ShutdownEngine();
+    }
+
+    private static void InitializeEngine()
+    {
+        if (_engineInitialized)
+        {
+            return;
+        }
+
+        Log.Initialize();
+        DenOfIzRuntime.Initialize();
+        Engine.Init(new EngineDesc());
+        _engineInitialized = true;
+    }
+
+    private static void ShutdownEngine()
+    {
+        if (!_engineInitialized)
+        {
+            return;
+        }
+
+        _engineInitialized = false;
         Engine.Shutdown();
     }
 

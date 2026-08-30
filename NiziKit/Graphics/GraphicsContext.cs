@@ -217,7 +217,6 @@ public sealed class GraphicsContext : IDisposable
     {
         _WaitIdle();
         Ui.Shutdown();
-        Core.Disposer.DisposeAll();
         _nullTexture?.Dispose();
         _resourceTracking.Dispose();
         _uniformBufferArena.Dispose();
