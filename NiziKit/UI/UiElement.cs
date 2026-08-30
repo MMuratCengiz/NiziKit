@@ -1,3 +1,4 @@
+using System.Numerics;
 using DenOfIz;
 
 namespace NiziKit.UI;
@@ -155,6 +156,95 @@ public ref struct UiElement
     {
         _decl.Scroll.Vertical = true;
         return this;
+    }
+
+    public UiElement ScrollHorizontal()
+    {
+        _decl.Scroll.Horizontal = true;
+        return this;
+    }
+
+    public UiElement Clip()
+    {
+        _decl.Clip.Horizontal = true;
+        _decl.Clip.Vertical = true;
+        return this;
+    }
+
+    public UiElement Clip(bool horizontal, bool vertical, Vector2 childOffset = default)
+    {
+        _decl.Clip = ClayClipDesc.Create(horizontal, vertical, childOffset);
+        return this;
+    }
+
+    public UiElement Overlay(UiColor color)
+    {
+        _decl.OverlayColor = color.ToClay();
+        return this;
+    }
+
+    public UiElement AspectRatio(float widthOverHeight)
+    {
+        _decl.AspectRatio = widthOverHeight;
+        return this;
+    }
+
+    public UiElement Transition(ClayTransitionDesc transition)
+    {
+        _decl.Transition = transition;
+        return this;
+    }
+
+    public UiElement Transition(float duration,
+        ClayTransitionPropertyFlagBits properties = ClayTransitionPropertyFlagBits.BoundingBox | ClayTransitionPropertyFlagBits.BackgroundColor |
+                                                    ClayTransitionPropertyFlagBits.OverlayColor | ClayTransitionPropertyFlagBits.Border,
+        ClayTransitionEasing easing = ClayTransitionEasing.EaseOut)
+    {
+        _decl.Transition = ClayTransitionDesc.Create(duration, properties, easing);
+        return this;
+    }
+
+    public UiElement EnterFrom(ClayTransitionStateDesc state, ClayTransitionEnterTrigger trigger = ClayTransitionEnterTrigger.SkipOnFirstParentFrame)
+    {
+        EnsureTransition();
+        _decl.Transition = _decl.Transition.WithEnter(state, trigger);
+        return this;
+    }
+
+    public UiElement ExitTo(ClayTransitionStateDesc state, ClayTransitionExitTrigger trigger = ClayTransitionExitTrigger.SkipWhenParentExits,
+        ClayExitTransitionSiblingOrdering siblingOrdering = ClayExitTransitionSiblingOrdering.UnderneathSiblings)
+    {
+        EnsureTransition();
+        _decl.Transition = _decl.Transition.WithExit(state, trigger, siblingOrdering);
+        return this;
+    }
+
+    public UiElement FadeIn(UiColor from)
+    {
+        return EnterFrom(ClayTransitionStateDesc.FromOverlay(from.ToClay()));
+    }
+
+    public UiElement FadeOut(UiColor to)
+    {
+        return ExitTo(ClayTransitionStateDesc.FromOverlay(to.ToClay()));
+    }
+
+    public UiElement SlideIn(Vector2 fromOffset)
+    {
+        return EnterFrom(ClayTransitionStateDesc.FromOffset(fromOffset));
+    }
+
+    public UiElement SlideOut(Vector2 toOffset)
+    {
+        return ExitTo(ClayTransitionStateDesc.FromOffset(toOffset));
+    }
+
+    private void EnsureTransition()
+    {
+        if (!_decl.Transition.Enabled)
+        {
+            _decl.Transition = ClayTransitionDesc.Default();
+        }
     }
 
     public UiElement CenterChildren()
