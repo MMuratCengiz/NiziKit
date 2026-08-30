@@ -40,12 +40,15 @@ public partial class RenderFrame : IDisposable
     private readonly Semaphore[] _submitWaitSemaphores;
 
     private int _currentFrame;
+    
+    public int FrameIndex => _currentFrame;
 
     private struct PassData
     {
         public RenderPass Pass;
         public Semaphore SignalSemaphore;
         public QueueType QueueType;
+        public Semaphore? ExternalWaitSemaphore;
         public int DependencyCount;
         public int Dep0, Dep1, Dep2, Dep3, Dep4, Dep5, Dep6, Dep7;
 
@@ -142,7 +145,7 @@ public partial class RenderFrame : IDisposable
 
         _submitCommandLists = new CommandList[1];
         _submitSignalSemaphores = new Semaphore[1];
-        _submitWaitSemaphores = new Semaphore[MaxDependenciesPerPass];
+        _submitWaitSemaphores = new Semaphore[MaxDependenciesPerPass + 1];
     }
 
     public void BeginFrame()
@@ -165,6 +168,7 @@ public partial class RenderFrame : IDisposable
         _graphicsPassCount = 0;
         _computePassCount = 0;
         _raytracingPassCount = 0;
+        ResetBlitPassIndex();
     }
 
     public GraphicsPass BeginGraphicsPass()
@@ -219,6 +223,7 @@ public partial class RenderFrame : IDisposable
         passData.Pass = pass;
         passData.SignalSemaphore = semaphore;
         passData.QueueType = QueueType.Graphics;
+        passData.ExternalWaitSemaphore = null;
         passData.DependencyCount = 0;
 
         for (var i = 0; i < _passCount && passData.DependencyCount < MaxDependenciesPerPass; i++)
@@ -242,6 +247,7 @@ public partial class RenderFrame : IDisposable
         passData.Pass = pass;
         passData.SignalSemaphore = semaphore;
         passData.QueueType = QueueType.Graphics;
+        passData.ExternalWaitSemaphore = null;
         passData.DependencyCount = 0;
 
         if (dependencyIndex >= 0)
@@ -265,6 +271,7 @@ public partial class RenderFrame : IDisposable
         passData.Pass = pass;
         passData.SignalSemaphore = semaphore;
         passData.QueueType = QueueType.Compute;
+        passData.ExternalWaitSemaphore = null;
         passData.DependencyCount = 0;
 
         if (dependencyIndex >= 0)
@@ -288,6 +295,7 @@ public partial class RenderFrame : IDisposable
         passData.Pass = pass;
         passData.SignalSemaphore = semaphore;
         passData.QueueType = QueueType.Graphics;
+        passData.ExternalWaitSemaphore = null;
         passData.DependencyCount = 0;
 
         if (dependencyIndex >= 0)
@@ -332,10 +340,16 @@ public partial class RenderFrame : IDisposable
             _submitCommandLists[0] = passData.Pass.CommandList;
             _submitSignalSemaphores[0] = passData.SignalSemaphore;
 
+            var waitCount = 0;
             for (var j = 0; j < passData.DependencyCount; j++)
             {
                 var depIndex = passData.GetDependency(j);
-                _submitWaitSemaphores[j] = _passes[depIndex].SignalSemaphore;
+                _submitWaitSemaphores[waitCount++] = _passes[depIndex].SignalSemaphore;
+            }
+
+            if (passData.ExternalWaitSemaphore != null)
+            {
+                _submitWaitSemaphores[waitCount++] = passData.ExternalWaitSemaphore;
             }
 
             var queue = passData.QueueType == QueueType.Compute
@@ -345,7 +359,7 @@ public partial class RenderFrame : IDisposable
             queue.ExecuteCommandLists(
                 new ReadOnlySpan<CommandList>(_submitCommandLists, 0, 1),
                 null,
-                new ReadOnlySpan<Semaphore>(_submitWaitSemaphores, 0, passData.DependencyCount),
+                new ReadOnlySpan<Semaphore>(_submitWaitSemaphores, 0, waitCount),
                 new ReadOnlySpan<Semaphore>(_submitSignalSemaphores, 0, 1));
         }
     }
@@ -385,6 +399,8 @@ public partial class RenderFrame : IDisposable
         GraphicsContext.GraphicsCommandQueue.WaitIdle();
         GraphicsContext.ComputeCommandQueue.WaitIdle();
 
+        DisposeBlitResources();
+        
         var numFrames = (int)GraphicsContext.NumFrames;
         for (var frame = 0; frame < numFrames; frame++)
         {

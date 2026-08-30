@@ -2,6 +2,7 @@ using DenOfIz;
 using NiziKit.Graphics;
 using NiziKit.Graphics.Renderer;
 using NiziKit.Graphics.Resources;
+using NiziKit.UI;
 using Pong.Entities;
 
 namespace Pong.Renderer;
@@ -13,6 +14,9 @@ public class QuadRenderer : IDisposable
 
     private readonly CycledTexture _sceneColor;
     private readonly CycledTexture _sceneDepth;
+    
+    private readonly CycledTexture _uiColor;
+    private readonly CycledTexture _uiDepth;
 
     private readonly CameraBinding _cameraBinding;
 
@@ -39,6 +43,8 @@ public class QuadRenderer : IDisposable
     });
 
     private Camera _camera = new();
+    
+    public Action? DrawUi { get; set; } = null;
 
     public QuadRenderer(Scene scene)
     {
@@ -46,6 +52,8 @@ public class QuadRenderer : IDisposable
         _renderFrame = new RenderFrame();
         _sceneColor = CycledTexture.ColorAttachment("SceneColor2D");
         _sceneDepth = CycledTexture.DepthAttachment("SceneDepth2D");
+        _uiColor = CycledTexture.ColorAttachment("UiColor");
+        _uiDepth = CycledTexture.DepthAttachment("UiDepth");
 
         _cameraBinding = new CameraBinding(_pipeline.ViewProjectionBindGroupLayout);
     }
@@ -94,10 +102,22 @@ public class QuadRenderer : IDisposable
         }
 
         pass.End();
+
+        var uiPass = _renderFrame.BeginGraphicsPass();
+        uiPass.SetRenderTarget(0, _uiColor, LoadOp.Clear);
+        uiPass.SetDepthTarget(_uiDepth!, LoadOp.Clear);
+        uiPass.Begin();
+        Ui.BeginFrame(deltaTime);
+        DrawUi?.Invoke();
+        Ui.EndFrame(deltaTime, uiPass.CommandList);
+        uiPass.End();
         
+        _renderFrame.AlphaBlit(_uiColor, _sceneColor);
+
         _renderFrame.Submit();
         _renderFrame.Present(_sceneColor);
     }
+
 
     private void EnsureBindings(int id)
     {
@@ -115,6 +135,8 @@ public class QuadRenderer : IDisposable
 
     public void Dispose()
     {
+        _uiColor.Dispose();
+        _uiDepth.Dispose();
         _renderFrame.Dispose();
 
         foreach (var binding in _albedoBindings)

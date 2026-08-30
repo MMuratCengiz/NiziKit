@@ -57,6 +57,25 @@ public ref struct UiElement
         return this;
     }
 
+    public UiElement Fit()
+    {
+        _decl.Layout.Sizing.Width = ClaySizingAxis.Fit(0, float.MaxValue);
+        _decl.Layout.Sizing.Height = ClaySizingAxis.Fit(0, float.MaxValue);
+        return this;
+    }
+
+    public UiElement FitWidth()
+    {
+        _decl.Layout.Sizing.Width = ClaySizingAxis.Fit(0, float.MaxValue);
+        return this;
+    }
+
+    public UiElement FitHeight()
+    {
+        _decl.Layout.Sizing.Height = ClaySizingAxis.Fit(0, float.MaxValue);
+        return this;
+    }
+
     public UiElement Fixed(float width, float height)
     {
         _decl.Layout.Sizing.Width = ClaySizingAxis.Fixed(width);
@@ -122,6 +141,13 @@ public ref struct UiElement
     {
         _decl.Border.Color = color.ToClay();
         _decl.Border.Width = ClayBorderWidth.CreateUniform(width);
+        return this;
+    }
+
+    public UiElement Border(UiColor color, float width, float betweenChildren)
+    {
+        _decl.Border.Color = color.ToClay();
+        _decl.Border.Width = ClayBorderWidth.Create(width, width, width, width, betweenChildren);
         return this;
     }
 

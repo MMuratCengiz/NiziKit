@@ -1,6 +1,8 @@
 using System.Numerics;
+using System.Runtime.CompilerServices;
 using DenOfIz;
 using NiziKit.Graphics;
+using Semaphore = DenOfIz.Semaphore;
 
 namespace NiziKit.UI;
 
@@ -43,6 +45,7 @@ public static class Ui
             MaxNumFonts = 4
         });
         _clay.SetViewportSize(GraphicsContext.Width, GraphicsContext.Height);
+        GraphicsContext.OnResize += HandleResize;
     }
 
     public static void Shutdown()
@@ -52,6 +55,7 @@ public static class Ui
             return;
         }
 
+        GraphicsContext.OnResize -= HandleResize;
         GraphicsContext.WaitIdle();
         _clay.Dispose();
         _clay = null;
@@ -69,9 +73,38 @@ public static class Ui
         Clay.BeginLayout();
     }
 
-    public static void EndFrame(uint frameIndex, float dt, CommandList commandList)
+    /// <summary>Ends the layout and records the UI draw into <paramref name="commandList"/> (must be inside an active render pass).</summary>
+    public static void EndFrame(float dt, CommandList commandList)
     {
-        Clay.EndLayout(frameIndex, dt, commandList);
+        Clay.EndLayout((uint)GraphicsContext.FrameIndex, dt, commandList);
+    }
+
+    /// <summary>
+    /// Ends the layout and renders the UI into Clay's own off-screen target. Returns the UI texture
+    /// (transparent where nothing was drawn) and the semaphore to wait on before sampling it —
+    /// pass both to <c>RenderFrame.AlphaBlit</c> to composite it over the scene.
+    /// Returns <c>null</c> when the layout produced no render commands (Clay renders nothing and hands back null handles).
+    /// </summary>
+    public static (Texture Texture, Semaphore Semaphore)? EndFrame(float dt)
+    {
+        var (texture, semaphore) = Clay.EndAndRenderLayout((uint)GraphicsContext.FrameIndex, dt);
+        if (GetHandle(texture) == 0 || GetHandle(semaphore) == 0)
+        {
+            return null;
+        }
+
+        return (texture, semaphore);
+    }
+
+    [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "get_Handle")]
+    private static extern ulong GetHandle(Texture texture);
+
+    [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "get_Handle")]
+    private static extern ulong GetHandle(Semaphore semaphore);
+
+    private static void HandleResize(uint width, uint height)
+    {
+        _clay?.SetViewportSize(width, height);
     }
 
     public static UiElement Element(string? id = null)

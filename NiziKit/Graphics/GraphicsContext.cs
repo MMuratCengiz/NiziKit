@@ -1,5 +1,6 @@
 using DenOfIz;
 using NiziKit.Graphics.Binding;
+using NiziKit.UI;
 
 namespace NiziKit.Graphics;
 
@@ -118,6 +119,7 @@ public sealed class GraphicsContext : IDisposable
             DebugName = StringView.Intern("ImGui Null Texture")
         };
         _nullTexture = _logicalDevice.CreateTexture(textureDesc);
+        Ui.Initialize();
     }
 
     public GraphicsContext(GraphicsDesc? desc = null)
@@ -214,7 +216,9 @@ public sealed class GraphicsContext : IDisposable
     public void Dispose()
     {
         _WaitIdle();
+        Ui.Shutdown();
         Core.Disposer.DisposeAll();
+        _nullTexture?.Dispose();
         _resourceTracking.Dispose();
         _uniformBufferArena.Dispose();
         _swapChain?.Dispose();

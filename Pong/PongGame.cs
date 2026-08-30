@@ -2,7 +2,7 @@ using System.Numerics;
 using DenOfIz;
 using NiziKit.Application;
 using NiziKit.Graphics;
-using NiziKit.Inputs;
+using NiziKit.UI;
 using Pong.Entities;
 using Pong.Movement;
 using Pong.Renderer;
@@ -20,12 +20,16 @@ public class PongGame(GameDesc? desc) : Game(desc)
     private SceneObject _ball;
     private PongPhysics _pongPhysics;
 
+    private int _topScore;
+    private int _bottomScore;
+
     protected override void Load(Game game)
     {
         _camera = Camera.Orthographic(orthographicSize: Window.Height / 2f, aspectRatio: Window.Width / (float)Window.Height);
         _camera.Position = new Vector3(Window.Width / 2f, Window.Height / 2f, 10f);
 
         _renderer = new QuadRenderer(_scene);
+        _renderer.DrawUi = DrawUi;
         _renderer.SetCamera(_camera);
         _renderer.AddTexture("Assets/Textures/Fighter.png");
         _renderer.Load();
@@ -59,7 +63,15 @@ public class PongGame(GameDesc? desc) : Game(desc)
 
     protected override void Update(float dt)
     {
-        _pongPhysics.Update(dt);
+        switch (_pongPhysics.Update(dt))
+        {
+            case PongScore.Top:
+                _topScore++;
+                break;
+            case PongScore.Bottom:
+                _bottomScore++;
+                break;
+        }
 
         const float speed = 1000.0f; 
         if (InputSystem.GetKeyState(KeyCode.A) == KeyState.Pressed)
@@ -80,6 +92,49 @@ public class PongGame(GameDesc? desc) : Game(desc)
         }
     }
 
+    private static readonly UiColor TableBackground = UiColor.Rgba(20, 20, 30, 140);
+    private static readonly UiColor TableBorder = UiColor.Rgba(110, 110, 130, 180);
+    private static readonly UiColor HeaderText = UiColor.Rgb(180, 180, 200);
+    private static readonly UiColor CellText = UiColor.Rgb(255, 255, 255);
+
+    private const float LabelCellWidth = 70;
+    private const float ScoreCellWidth = 40;
+    private const float CellHeight = 26;
+
+    void DrawUi()
+    {
+        using (Ui.Column().Padding(12).AlignChildren(ClayAlignmentX.Right, ClayAlignmentY.Center).Open())
+        {
+            using (Ui.Column()
+                       .Fit()
+                       .Background(TableBackground)
+                       .Border(TableBorder, 1, betweenChildren: 1)
+                       .CornerRadius(4)
+                       .Open())
+            {
+                ScoreRow("Top", _topScore);
+                ScoreRow("Bottom", _bottomScore);
+            }
+        }
+    }
+
+    private static void ScoreRow(string label, int score)
+    {
+        using (Ui.Row().Fit().Border(TableBorder, 0, betweenChildren: 1).Open())
+        {
+            TableCell(label, LabelCellWidth, HeaderText);
+            TableCell($"{score}", ScoreCellWidth, CellText);
+        }
+    }
+
+    private static void TableCell(string text, float width, UiColor color)
+    {
+        using (Ui.Element().Fixed(width, CellHeight).CenterChildren().Open())
+        {
+            Ui.Text(text, 14, color);
+        }
+    }
+
     protected override void OnResize(uint width, uint height)
     {
         if (height > 0)
@@ -88,6 +143,11 @@ public class PongGame(GameDesc? desc) : Game(desc)
             _camera.AspectRatio = width / (float)height;
             _camera.Position = new Vector3(width / 2f, height / 2f, 10f);
         }
+    }
+
+    protected override void OnEvent(ref Event ev)
+    {
+        Ui.HandleEvent(ref ev);
     }
 
     protected override void Render(float dt)

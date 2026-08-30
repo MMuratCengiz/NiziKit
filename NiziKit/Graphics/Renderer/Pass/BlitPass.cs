@@ -1,24 +1,25 @@
-using System.Text;
+﻿using System.Text;
 using DenOfIz;
 using NiziKit.Graphics.Resources;
 
 namespace NiziKit.Graphics.Renderer.Pass;
 
-public class PresentPass : IDisposable
+public class BlitPass : IDisposable
 {
+    private static readonly Format[] CommonFormats = [Format.B8G8R8A8Unorm, Format.R8G8B8A8Unorm];
+
     private readonly ShaderProgram _program;
     private readonly RootSignature _rootSignature;
     private readonly InputLayout _inputLayout;
-    private readonly Pipeline _pipeline;
     private readonly BindGroupLayout _bindGroupLayout;
     private readonly Sampler _linearSampler;
-
+    private readonly Dictionary<Format, Pipeline> _pipelines = new();
+    private readonly Lock _pipelineLock = new();
     private readonly BindGroup[] _bindGroups;
     private readonly Texture?[] _boundTextures;
-
     private readonly PinnedArray<RenderingAttachmentDesc> _rtAttachment;
 
-    public PresentPass()
+    public BlitPass()
     {
         var programDesc = new ShaderProgramDesc
         {
@@ -32,7 +33,7 @@ public class PresentPass : IDisposable
                 new ShaderStageDesc
                 {
                     EntryPoint = StringView.Create("PSMain"),
-                    Data = ByteArray.Create(Encoding.UTF8.GetBytes(PassShaders.PresentShader)),
+                    Data = ByteArray.Create(Encoding.UTF8.GetBytes(PassShaders.BlitPsShader)),
                     Stage = (uint)ShaderStageFlagBits.Pixel
                 }
             ])
@@ -49,43 +50,6 @@ public class PresentPass : IDisposable
         };
         _rootSignature = GraphicsContext.Device.CreateRootSignature(rootSigDesc);
         _inputLayout = GraphicsContext.Device.CreateInputLayout(reflection.InputLayout);
-
-        var blendDesc = new BlendDesc
-        {
-            Enable = false,
-            RenderTargetWriteMask = 0x0F
-        };
-
-        var renderTarget = new RenderTargetDesc
-        {
-            Format = GraphicsContext.BackBufferFormat,
-            Blend = blendDesc
-        };
-
-        using var renderTargets = RenderTargetDescArray.Create([renderTarget]);
-
-        var pipelineDesc = new PipelineDesc
-        {
-            RootSignature = _rootSignature,
-            InputLayout = _inputLayout,
-            ShaderProgram = _program,
-            BindPoint = BindPoint.Graphics,
-            Graphics = new GraphicsPipelineDesc
-            {
-                PrimitiveTopology = PrimitiveTopology.Triangle,
-                CullMode = CullMode.None,
-                FillMode = FillMode.Solid,
-                DepthTest = new DepthTest
-                {
-                    Enable = false,
-                    CompareOp = CompareOp.Always,
-                    Write = false
-                },
-                RenderTargets = renderTargets
-            }
-        };
-
-        _pipeline = GraphicsContext.Device.CreatePipeline(pipelineDesc);
 
         _linearSampler = GraphicsContext.Device.CreateSampler(new SamplerDesc
         {
@@ -110,40 +74,45 @@ public class PresentPass : IDisposable
         }
 
         _rtAttachment = new PinnedArray<RenderingAttachmentDesc>(1);
+
+        Parallel.ForEach(CommonFormats, format => GetOrCreatePipeline(format));
     }
 
-    public void Execute(CommandList commandList, CycledTexture sourceTexture)
-    {
-        var texture = sourceTexture[GraphicsContext.FrameIndex];
-        Execute(commandList, texture);
-    }
-
-    public void Execute(CommandList commandList, Texture texture)
+    public void Execute(CommandList commandList, CycledTexture source, CycledTexture dest)
     {
         var frameIndex = GraphicsContext.FrameIndex;
-        var swapChainImageIndex = GraphicsContext.SwapChain.AcquireNextImage();
-        var swapChainImage = GraphicsContext.SwapChain.GetRenderTarget(swapChainImageIndex);
+        Execute(commandList, source[frameIndex], dest[frameIndex], dest.Format, dest.Width, dest.Height);
+    }
 
-        commandList.Begin();
+    public void Execute(CommandList commandList, Texture source, CycledTexture dest)
+    {
+        var frameIndex = GraphicsContext.FrameIndex;
+        Execute(commandList, source, dest[frameIndex], dest.Format, dest.Width, dest.Height);
+    }
+
+    private void Execute(CommandList commandList, Texture source, Texture dest, Format destFormat, uint width, uint height)
+    {
+        var frameIndex = GraphicsContext.FrameIndex;
+        var pipeline = GetOrCreatePipeline(destFormat);
 
         GraphicsContext.ResourceTracking.TransitionTexture(
             commandList,
-            texture,
+            source,
             (uint)ResourceUsageFlagBits.ShaderResource,
             QueueType.Graphics);
 
         GraphicsContext.ResourceTracking.TransitionTexture(
             commandList,
-            swapChainImage,
+            dest,
             (uint)ResourceUsageFlagBits.RenderTarget,
             QueueType.Graphics);
 
-        UpdateBindGroup(frameIndex, texture);
+        UpdateBindGroup(frameIndex, source);
 
         _rtAttachment[0] = new RenderingAttachmentDesc
         {
-            Resource = swapChainImage,
-            LoadOp = LoadOp.DontCare,
+            Resource = dest,
+            LoadOp = LoadOp.Load,
             StoreOp = StoreOp.Store
         };
 
@@ -154,40 +123,85 @@ public class PresentPass : IDisposable
         };
 
         commandList.BeginRendering(renderingDesc);
-
-        commandList.BindViewport(0, 0, GraphicsContext.Width, GraphicsContext.Height);
-        commandList.BindScissorRect(0, 0, GraphicsContext.Width, GraphicsContext.Height);
-
-        commandList.BindPipeline(_pipeline);
+        commandList.BindViewport(0, 0, width, height);
+        commandList.BindScissorRect(0, 0, width, height);
+        commandList.BindPipeline(pipeline);
         commandList.BindGroup(_bindGroups[frameIndex]);
-
         commandList.Draw(3, 1, 0, 0);
-
         commandList.EndRendering();
-
-        GraphicsContext.ResourceTracking.TransitionTexture(
-            commandList,
-            swapChainImage,
-            (uint)ResourceUsageFlagBits.Present,
-            QueueType.Graphics);
-
-        commandList.End();
     }
 
-    private void UpdateBindGroup(int frameIndex, Texture texture)
+    private Pipeline GetOrCreatePipeline(Format format)
     {
-        if (_boundTextures[frameIndex] == texture)
+        lock (_pipelineLock)
+        {
+            if (_pipelines.TryGetValue(format, out var existing))
+            {
+                return existing;
+            }
+
+            var blendDesc = new BlendDesc
+            {
+                Enable = true,
+                SrcBlend = Blend.One,
+                DstBlend = Blend.InvSrcAlpha,
+                BlendOp = BlendOp.Add,
+                SrcBlendAlpha = Blend.One,
+                DstBlendAlpha = Blend.InvSrcAlpha,
+                BlendOpAlpha = BlendOp.Add,
+                RenderTargetWriteMask = 0x0F
+            };
+
+            var renderTarget = new RenderTargetDesc
+            {
+                Format = format,
+                Blend = blendDesc
+            };
+
+            using var renderTargets = RenderTargetDescArray.Create([renderTarget]);
+
+            var pipelineDesc = new PipelineDesc
+            {
+                RootSignature = _rootSignature,
+                InputLayout = _inputLayout,
+                ShaderProgram = _program,
+                BindPoint = BindPoint.Graphics,
+                Graphics = new GraphicsPipelineDesc
+                {
+                    PrimitiveTopology = PrimitiveTopology.Triangle,
+                    CullMode = CullMode.None,
+                    FillMode = FillMode.Solid,
+                    DepthTest = new DepthTest
+                    {
+                        Enable = false,
+                        CompareOp = CompareOp.Always,
+                        Write = false
+                    },
+                    RenderTargets = renderTargets
+                }
+            };
+
+            var pipeline = GraphicsContext.Device.CreatePipeline(pipelineDesc);
+            _pipelines[format] = pipeline;
+            return pipeline;
+        }
+    }
+
+    private void UpdateBindGroup(int frameIndex, Texture sourceTexture)
+    {
+        if (_boundTextures[frameIndex] == sourceTexture)
         {
             return;
         }
 
         var bindGroup = _bindGroups[frameIndex];
         bindGroup.BeginUpdate();
-        bindGroup.SrvTexture(0, texture);
+        bindGroup.SrvTexture(0, sourceTexture);
+        bindGroup.SrvTexture(1, GraphicsContext.NullTexture);
         bindGroup.Sampler(0, _linearSampler);
         bindGroup.EndUpdate();
 
-        _boundTextures[frameIndex] = texture;
+        _boundTextures[frameIndex] = sourceTexture;
     }
 
     public void Dispose()
@@ -199,8 +213,14 @@ public class PresentPass : IDisposable
             bindGroup.Dispose();
         }
 
+        foreach (var pipeline in _pipelines.Values)
+        {
+            pipeline.Dispose();
+        }
+
+        _pipelines.Clear();
+
         _linearSampler.Dispose();
-        _pipeline.Dispose();
         _inputLayout.Dispose();
         _rootSignature.Dispose();
         _bindGroupLayout.Dispose();
