@@ -76,7 +76,7 @@ public class Game : IDisposable
         _instance = this;
     }
 
-    protected virtual void Load(Game game)
+    protected virtual void Load()
     {
     }
 
@@ -107,7 +107,7 @@ public class Game : IDisposable
     public void Run()
     {
         Window.Show();
-        Load(this);
+        Load();
 
         IsRunning = true;
         Time.Start();

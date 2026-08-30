@@ -23,7 +23,7 @@ public class PongGame(GameDesc? desc) : Game(desc)
     private int _topScore;
     private int _bottomScore;
 
-    protected override void Load(Game game)
+    protected override void Load()
     {
         _camera = Camera.Orthographic(orthographicSize: Window.Height / 2f, aspectRatio: Window.Width / (float)Window.Height);
         _camera.Position = new Vector3(Window.Width / 2f, Window.Height / 2f, 10f);

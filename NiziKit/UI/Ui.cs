@@ -2,6 +2,7 @@ using System.Numerics;
 using System.Runtime.CompilerServices;
 using DenOfIz;
 using NiziKit.Graphics;
+using NiziKit.UI.Widgets;
 using Semaphore = DenOfIz.Semaphore;
 
 namespace NiziKit.UI;
@@ -12,7 +13,7 @@ namespace NiziKit.UI;
 /// then per frame: <see cref="BeginFrame"/>, declare elements, <see cref="EndFrame"/>
 /// (inside an active render pass).
 /// </summary>
-public static class Ui
+public static partial class Ui
 {
     private static Clay? _clay;
     private static readonly Dictionary<string, uint> IdCache = new();
@@ -23,7 +24,7 @@ public static class Ui
     /// True if the pointer was over any pointer-capturing element in the last declared frame.
     /// Published at <see cref="EndFrame"/>; read it in Update (standard imgui pattern).
     /// </summary>
-    public static bool IsPointerOverUi { get; private set; }
+    public static bool IsPointerOverUi { get; internal set; }
 
     public static void Initialize()
     {
@@ -42,10 +43,11 @@ public static class Ui
             Height = GraphicsContext.Height,
             MaxNumElements = 8192,
             MaxNumTextMeasureCacheElements = 16384,
-            MaxNumFonts = 4
+            MaxNumFonts = 16
         });
         _clay.SetViewportSize(GraphicsContext.Width, GraphicsContext.Height);
         GraphicsContext.OnResize += HandleResize;
+        FontAwesome.TryInitialize();
     }
 
     public static void Shutdown()
@@ -57,6 +59,8 @@ public static class Ui
 
         GraphicsContext.OnResize -= HandleResize;
         GraphicsContext.WaitIdle();
+        FontAwesome.Shutdown();
+        UiFonts.Shutdown();
         _clay.Dispose();
         _clay = null;
         IdCache.Clear();
@@ -64,11 +68,13 @@ public static class Ui
 
     public static void HandleEvent(ref Event ev)
     {
+        HandleWidgetEvent(ref ev);
         Clay.HandleEvent(in ev);
     }
 
     public static void BeginFrame(float dt)
     {
+        BeginInput(dt);
         Clay.UpdateScrollContainers(false, Vector2.Zero, dt);
         Clay.BeginLayout();
     }
@@ -77,6 +83,7 @@ public static class Ui
     public static void EndFrame(float dt, CommandList commandList)
     {
         Clay.EndLayout((uint)GraphicsContext.FrameIndex, dt, commandList);
+        EndInput();
     }
 
     /// <summary>
@@ -88,6 +95,7 @@ public static class Ui
     public static (Texture Texture, Semaphore Semaphore)? EndFrame(float dt)
     {
         var (texture, semaphore) = Clay.EndAndRenderLayout((uint)GraphicsContext.FrameIndex, dt);
+        EndInput();
         if (GetHandle(texture) == 0 || GetHandle(semaphore) == 0)
         {
             return null;
@@ -129,7 +137,7 @@ public static class Ui
         desc.FontId = 0;
         desc.FontSize = (ushort)fontSize;
         desc.WrapMode = ClayTextWrapMode.Words;
-        Clay.Text(text, in desc);
+        UiText.Draw(text, in desc);
     }
 
     /// <summary>Declares a button, returns true if it was clicked this frame.</summary>
