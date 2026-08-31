@@ -188,6 +188,13 @@ public partial class RenderFrame : IDisposable
         AddDependency(_passCount - 1, FindPassIndex(dependency2));
         return pass;
     }
+    
+    public GraphicsPass BeginGraphicsPass(Semaphore? externalWaitSemaphore)
+    {
+        var pass = BeginGraphicsPassInternal(-1);
+        _passes[_passCount - 1].ExternalWaitSemaphore = externalWaitSemaphore;
+        return pass;
+    }
 
     public ComputePass BeginComputePass()
     {
