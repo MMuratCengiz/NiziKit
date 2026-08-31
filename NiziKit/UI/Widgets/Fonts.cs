@@ -5,7 +5,7 @@ using DenOfIz;
 
 namespace NiziKit.UI.Widgets;
 
-public static class UiFonts
+public static class Fonts
 {
     private sealed class FontEntry : IDisposable
     {
@@ -29,7 +29,7 @@ public static class UiFonts
     }
 
     private static FontLibrary? _library;
-    private static readonly Dictionary<ushort, FontEntry> Fonts = new();
+    private static readonly Dictionary<ushort, FontEntry> Entries = new();
 
     public const ushort DefaultFontId = 0;
 
@@ -37,12 +37,12 @@ public static class UiFonts
 
     public static bool IsRegistered(ushort fontId)
     {
-        return Fonts.ContainsKey(fontId);
+        return Entries.ContainsKey(fontId);
     }
 
     public static bool TryGet(ushort fontId, out Font font)
     {
-        if (Fonts.TryGetValue(fontId, out var entry))
+        if (Entries.TryGetValue(fontId, out var entry))
         {
             font = entry.Font;
             return true;
@@ -104,7 +104,7 @@ public static class UiFonts
             return LoadAsset(data, fontId);
         }
 
-        throw new InvalidOperationException($"Unsupported embedded font format '{resourceName}'. Embed a .dzfont or .dzfont.br produced by UiFonts.Export.");
+        throw new InvalidOperationException($"Unsupported embedded font format '{resourceName}'. Embed a .dzfont or .dzfont.br produced by Fonts.Export.");
     }
 
     public static Font LoadCompressedAsset(Stream compressed, ushort fontId)
@@ -209,7 +209,7 @@ public static class UiFonts
 
     private static void Register(ushort fontId, FontEntry entry)
     {
-        if (Fonts.Remove(fontId, out var existing))
+        if (Entries.Remove(fontId, out var existing))
         {
             Ui.Clay.RemoveFont(fontId);
             if (!ReferenceEquals(existing.Font, entry.Font))
@@ -219,12 +219,12 @@ public static class UiFonts
         }
 
         Ui.Clay.AddFont(fontId, entry.Font);
-        Fonts[fontId] = entry;
+        Entries[fontId] = entry;
     }
 
     public static void Unload(ushort fontId)
     {
-        if (!Fonts.Remove(fontId, out var entry))
+        if (!Entries.Remove(fontId, out var entry))
         {
             return;
         }
@@ -235,12 +235,12 @@ public static class UiFonts
 
     public static void Shutdown()
     {
-        foreach (var entry in Fonts.Values)
+        foreach (var entry in Entries.Values)
         {
             entry.Dispose();
         }
 
-        Fonts.Clear();
+        Entries.Clear();
         _library?.Dispose();
         _library = null;
     }

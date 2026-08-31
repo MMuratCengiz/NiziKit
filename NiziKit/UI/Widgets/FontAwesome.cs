@@ -240,7 +240,7 @@ public static class FontAwesome
             return;
         }
 
-        UiFonts.LoadEmbedded(typeof(FontAwesome).Assembly, ResourceName, fontId);
+        Fonts.LoadEmbedded(typeof(FontAwesome).Assembly, ResourceName, fontId);
         _loadedFontId = fontId;
         IsInitialized = true;
     }
@@ -252,7 +252,7 @@ public static class FontAwesome
             return;
         }
 
-        UiFonts.Unload(_loadedFontId);
+        Fonts.Unload(_loadedFontId);
         IsInitialized = false;
     }
 }

@@ -51,8 +51,6 @@ public class Checkbox : HStack
     }
 
     public float BoxSize { get; set; } = 18;
-    public UiColor TextColor { get; set; } = UiColor.Rgb(235, 235, 240);
-    public UiColor DisabledTextColor { get; set; } = UiColor.Rgb(160, 165, 180);
 
     public int FontSize
     {
@@ -66,13 +64,13 @@ public class Checkbox : HStack
         set => _label.FontId = value;
     }
 
-    public UiStyle Style { get; set; } = new()
+    public Style Style { get; set; } = new()
     {
-        Normal = new UiStyleState { Background = UiColor.Rgb(28, 30, 38), Border = UiColor.Rgb(70, 76, 94), BorderWidth = 1, Text = UiColor.Rgb(235, 235, 240) },
-        Hover = new UiStyleState { Border = UiColor.Rgb(113, 149, 242) },
-        Checked = new UiStyleState { Background = UiColor.Rgb(88, 130, 240), Border = UiColor.Rgb(88, 130, 240) },
-        Disabled = new UiStyleState { Background = UiColor.Rgb(46, 50, 62), Border = UiColor.Rgb(46, 50, 62), Text = UiColor.Rgb(160, 165, 180) },
-        Focused = new UiStyleState { Border = UiColor.Rgb(88, 130, 240), BorderWidth = 2 }
+        Normal = new StyleState { Background = Color.Rgb(28, 30, 38), Border = Color.Rgb(70, 76, 94), BorderWidth = 1, Text = Color.Rgb(235, 235, 240) },
+        Hover = new StyleState { Border = Color.Rgb(113, 149, 242) },
+        Checked = new StyleState { Background = Color.Rgb(88, 130, 240), Border = Color.Rgb(88, 130, 240) },
+        Disabled = new StyleState { Background = Color.Rgb(46, 50, 62), Border = Color.Rgb(46, 50, 62), Text = Color.Rgb(160, 165, 180) },
+        Focused = new StyleState { Border = Color.Rgb(88, 130, 240), BorderWidth = 2 }
     };
 
     public bool AnimateHover { get; set; } = true;
@@ -83,9 +81,9 @@ public class Checkbox : HStack
 
     protected internal override bool IsKeyActivatable => true;
 
-    protected override void OnClick(UiMouseButton button)
+    protected override void OnClick(MouseButton button)
     {
-        if (button == UiMouseButton.Left)
+        if (button == MouseButton.Left)
         {
             Checked = !Checked;
         }
@@ -94,13 +92,16 @@ public class Checkbox : HStack
     protected override void ApplyDeclaration(ref ClayElementDeclaration decl)
     {
         base.ApplyDeclaration(ref decl);
-        _label.Color = IsEnabled ? TextColor : DisabledTextColor;
+        if (Style.Resolve(this).Text is { } text)
+        {
+            _label.Color = text;
+        }
     }
 
     private sealed class CheckBoxMark : Widget
     {
         private readonly Checkbox _owner;
-        private UiColor _markColor;
+        private Color _markColor;
 
         public CheckBoxMark(Checkbox owner)
         {
@@ -115,30 +116,16 @@ public class Checkbox : HStack
             base.ApplyDeclaration(ref decl);
 
             var state = _owner.Style.Resolve(_owner, _owner.Checked);
-            if (state.Background is { } background)
-            {
-                decl.BackgroundColor = background.ToClay();
-            }
-
-            if (state.Border is { } border)
-            {
-                decl.Border.Color = border.ToClay();
-                decl.Border.Width = ClayBorderWidth.CreateUniform(state.BorderWidth ?? 1);
-            }
-
-            if (state.CornerRadius is { } radius)
-            {
-                decl.BorderRadius = ClayBorderRadius.CreateUniform(radius);
-            }
+            state.Apply(this, ref decl);
 
             if (_owner.AnimateHover)
             {
-                decl.Transition = UiStyle.HoverTransition;
+                decl.Transition = Style.HoverTransition;
             }
 
             decl.Layout.ChildAlignment.X = ClayAlignmentX.Center;
             decl.Layout.ChildAlignment.Y = ClayAlignmentY.Center;
-            _markColor = state.Text ?? _owner.TextColor;
+            _markColor = state.Text ?? Color.Rgb(235, 235, 240);
         }
 
         protected override void BuildContent()

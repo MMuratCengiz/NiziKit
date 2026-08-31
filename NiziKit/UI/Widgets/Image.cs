@@ -3,7 +3,7 @@ using DenOfIz;
 
 namespace NiziKit.UI.Widgets;
 
-public enum UiImageFit
+public enum ImageFit
 {
     Stretch,
     Contain,
@@ -32,8 +32,8 @@ public class Image : Widget
     public Texture? Texture { get; set; }
     public Func<Texture?>? TextureBinding { get; init; }
     public Vector2 SourceSize { get; set; }
-    public UiImageFit Fit { get; init; } = UiImageFit.Stretch;
-    public UiColor? Tint { get; init; }
+    public ImageFit Fit { get; init; } = ImageFit.Stretch;
+    public Color? Tint { get; init; }
 
     public bool HasSourceSize => SourceSize.X > 0 && SourceSize.Y > 0;
 
@@ -48,7 +48,7 @@ public class Image : Widget
             decl.OverlayColor = tint.ToClay();
         }
 
-        if (Fit == UiImageFit.Cover && !ClipChildren)
+        if (Fit == ImageFit.Cover && !ClipChildren)
         {
             decl.Clip = ClayClipDesc.Create(true, true);
         }
@@ -105,11 +105,11 @@ public class Image : Widget
             return;
         }
 
-        if (Fit != UiImageFit.Stretch && HasSourceSize)
+        if (Fit != ImageFit.Stretch && HasSourceSize)
         {
             var scaleX = width / SourceSize.X;
             var scaleY = height / SourceSize.Y;
-            var scale = Fit == UiImageFit.Contain ? MathF.Min(scaleX, scaleY) : MathF.Max(scaleX, scaleY);
+            var scale = Fit == ImageFit.Contain ? MathF.Min(scaleX, scaleY) : MathF.Max(scaleX, scaleY);
             width = SourceSize.X * scale;
             height = SourceSize.Y * scale;
         }
@@ -117,12 +117,12 @@ public class Image : Widget
         Ui.Clay.Texture(Texture, width, height);
     }
 
-    private float ResolveAxis(UiSize size, float padding, bool horizontal)
+    private float ResolveAxis(Sizing size, float padding, bool horizontal)
     {
         return size.Kind switch
         {
-            UiSizeKind.Fixed => size.Value - padding,
-            UiSizeKind.Fit => float.NaN,
+            SizingKind.Fixed => size.Value - padding,
+            SizingKind.Fit => float.NaN,
             _ => Ui.Clay.PixelsToPoints(horizontal ? Bounds.Width : Bounds.Height) - padding
         };
     }

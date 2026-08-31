@@ -3,48 +3,56 @@ using DenOfIz;
 
 namespace NiziKit.UI.Widgets;
 
-internal static class OverlayMotion
-{
-    internal static readonly Vector2 SlideOffset = new(0, -8);
-    internal static readonly UiColor Transparent = UiColor.Rgba(0, 0, 0, 0);
-
-    internal const float ExitDuration = 0.15f;
-
-    internal static void Slide(Widget widget)
-    {
-        widget.SlideIn(SlideOffset);
-    }
-
-    internal static void Fade(Widget widget)
-    {
-        widget.FadeIn(widget.Background ?? Transparent);
-    }
-
-    internal static void FadeBackground(Widget widget)
-    {
-        widget.Animate(0.2f);
-        widget.EnterFrom(new ClayTransitionStateDesc().WithBackgroundColor(Transparent.ToClay()));
-    }
-}
-
+/// <summary>
+/// Floating panel. While open it lives in <see cref="Ui.Overlays"/>, owns a z-index above everything
+/// declared before it, clamps itself into the viewport and dismisses on click-outside or Escape.
+/// Anchor it to a widget (<see cref="Open(Widget)"/>), to a screen position (<see cref="ShowAt"/>)
+/// or to the viewport centre (<see cref="ShowCentered"/>); give it a <see cref="Backdrop"/> to make
+/// it modal. Menus, tooltips, dropdown lists and dialogs are all this type plus content.
+/// </summary>
 public class Popup : StackPanel
 {
+    internal static readonly Color Transparent = Color.Rgba(0, 0, 0, 0);
+    internal static readonly Vector2 SlideOffset = new(0, -8);
+    internal const float ExitDuration = 0.15f;
+
     private static readonly List<Popup> OpenPopups = new();
 
+    private PopupBackdrop? _backdrop;
     private bool _armed;
 
-    public Popup() : base(UiOrientation.Vertical)
+    public Popup() : base(Orientation.Vertical)
     {
-        Background = UiColor.Rgb(44, 48, 60);
-        BorderColor = UiColor.Rgb(70, 76, 94);
+        Background = Color.Rgb(44, 48, 60);
+        BorderColor = Color.Rgb(70, 76, 94);
         CornerRadius = 6;
         Padding = 6;
-        OverlayMotion.Slide(this);
+        SlideIn(SlideOffset);
     }
 
     public bool IsOpen { get; private set; }
     public bool CloseOnClickOutside { get; set; } = true;
     public bool CloseOnEscape { get; set; } = true;
+
+    /// <summary>Keeps the panel inside the viewport when it is anchored to a screen position.</summary>
+    public bool ClampToViewport { get; set; } = true;
+
+    /// <summary>
+    /// False lets the pointer fall through to whatever is underneath, so the panel neither blocks
+    /// clicks nor counts as hovered. Set it for pointer-following overlays such as tooltips.
+    /// </summary>
+    public bool CapturePointer { get; set; } = true;
+
+    /// <summary>
+    /// Fills the viewport behind the panel while it is open, blocking input to everything below.
+    /// Null (the default) leaves the rest of the UI live.
+    /// </summary>
+    public Color? Backdrop { get; set; }
+
+    /// <summary>
+    /// Widget this panel belongs to. Popups form a chain through their owners: closing one closes
+    /// everything it owns, and a click inside a child counts as a click inside its parent.
+    /// </summary>
     public Widget? Owner { get; set; }
 
     public event Action<Popup>? Opened;
@@ -64,8 +72,21 @@ public class Popup : StackPanel
         }
     }
 
-    public void Open(UiFloating placement)
+    public void Open(Floating placement)
     {
+        placement.CapturePointer = CapturePointer;
+        if (Backdrop is { } backdrop)
+        {
+            _backdrop ??= new PopupBackdrop(this);
+            _backdrop.CancelExit();
+            _backdrop.Background = backdrop;
+            _backdrop.Floating = new Floating { AttachTo = AttachTo.Root, ZIndex = Ui.NextZIndex() };
+            if (_backdrop.Parent != Ui.Overlays)
+            {
+                Ui.Overlays.Add(_backdrop);
+            }
+        }
+
         placement.ZIndex = Ui.NextZIndex();
         Floating = placement;
         if (IsOpen)
@@ -90,7 +111,18 @@ public class Popup : StackPanel
 
     public void Open(Widget anchor)
     {
-        Open(UiFloating.Below(anchor));
+        Open(Floating.Below(anchor));
+    }
+
+    /// <summary>Opens the panel at a position in pixels, such as <see cref="Ui.PointerPosition"/>.</summary>
+    public void ShowAt(Vector2 pixelPosition)
+    {
+        Open(Floating.AtRoot(new Vector2(Ui.Clay.PixelsToPoints(pixelPosition.X), Ui.Clay.PixelsToPoints(pixelPosition.Y))));
+    }
+
+    public void ShowCentered()
+    {
+        Open(Floating.Centered());
     }
 
     public void Toggle(Widget anchor)
@@ -115,13 +147,20 @@ public class Popup : StackPanel
 
         IsOpen = false;
         CloseOwned();
-        BeginExit(OverlayMotion.ExitDuration, OverlayMotion.SlideOffset, null, () => Ui.Overlays.Remove(this));
+        BeginExit(ExitDuration, SlideOffset, null, () => Ui.Overlays.Remove(this));
+        if (_backdrop != null)
+        {
+            _backdrop.Background = _backdrop.Background?.WithAlpha(0);
+            _backdrop.BeginExit(ExitDuration, Vector2.Zero, null, () => Ui.Overlays.Remove(_backdrop));
+        }
+
         OpenPopups.Remove(this);
         Ui.UnhandledKeyDown -= HandleKey;
         OnClosed();
         Closed?.Invoke(this);
     }
 
+    /// <summary>Closes the root of this panel's owner chain, tearing down the whole stack at once.</summary>
     public void Dismiss()
     {
         var root = this;
@@ -221,7 +260,7 @@ public class Popup : StackPanel
 
     private static bool AnyButtonPressed()
     {
-        return Ui.WasPressed(UiMouseButton.Left) || Ui.WasPressed(UiMouseButton.Right) || Ui.WasPressed(UiMouseButton.Middle);
+        return Ui.WasPressed(MouseButton.Left) || Ui.WasPressed(MouseButton.Right) || Ui.WasPressed(MouseButton.Middle);
     }
 
     private void HandleKey(KeyboardEventData key)
@@ -230,6 +269,36 @@ public class Popup : StackPanel
         {
             Close();
         }
+    }
+
+    private void ClampIntoViewport()
+    {
+        if (Floating is not { AttachTo: AttachTo.Root } placement || !ClampToViewport)
+        {
+            return;
+        }
+
+        var bounds = Bounds;
+        if (bounds.Width <= 0 || bounds.Height <= 0)
+        {
+            return;
+        }
+
+        var viewport = Ui.Clay.GetViewportSize();
+        var offset = placement.Offset;
+        var overflowX = bounds.X + bounds.Width - viewport.Width;
+        if (overflowX > 0)
+        {
+            offset.X -= Ui.Clay.PixelsToPoints(overflowX);
+        }
+
+        var overflowY = bounds.Y + bounds.Height - viewport.Height;
+        if (overflowY > 0)
+        {
+            offset.Y -= Ui.Clay.PixelsToPoints(overflowY);
+        }
+
+        placement.Offset = new Vector2(MathF.Max(0, offset.X), MathF.Max(0, offset.Y));
     }
 
     protected virtual void OnOpened()
@@ -253,15 +322,41 @@ public class Popup : StackPanel
             return;
         }
 
-        if (Floating is { AttachTo: UiAttachTo.Element } anchored && (anchored.Anchor == null || !anchored.Anchor.BuiltLastFrame || !anchored.Anchor.IsVisible))
+        if (Floating is { AttachTo: AttachTo.Element } anchored && (anchored.Anchor == null || !anchored.Anchor.BuiltLastFrame || !anchored.Anchor.IsVisible))
         {
             Close();
             return;
         }
 
+        ClampIntoViewport();
+
         if (CloseOnClickOutside && AnyButtonPressed() && !ContainsPointer() && !PointerOverOwner())
         {
             Close();
+        }
+    }
+
+    private sealed class PopupBackdrop : Widget
+    {
+        private readonly Popup _owner;
+
+        public PopupBackdrop(Popup owner)
+        {
+            _owner = owner;
+            Width = Sizing.Grow;
+            Height = Sizing.Grow;
+            Animate(0.2f);
+            EnterFrom(new ClayTransitionStateDesc().WithBackgroundColor(Transparent.ToClay()));
+        }
+
+        protected override bool TracksPointer => true;
+
+        protected override void OnClick(MouseButton button)
+        {
+            if (button == MouseButton.Left && _owner.CloseOnClickOutside && Topmost == _owner)
+            {
+                _owner.Close();
+            }
         }
     }
 }

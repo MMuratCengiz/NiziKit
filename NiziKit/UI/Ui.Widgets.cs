@@ -14,7 +14,7 @@ public sealed class OverlayLayer : Container
     }
 }
 
-public sealed class UiShortcut(KeyCode key, bool ctrl, bool shift, bool alt, Action action)
+public sealed class Shortcut(KeyCode key, bool ctrl, bool shift, bool alt, Action action)
 {
     public KeyCode Key { get; } = key;
     public bool Ctrl { get; } = ctrl;
@@ -31,9 +31,11 @@ public static partial class Ui
 
     private static uint _nextWidgetId = 1;
     private static readonly List<Widget> FrameWidgets = new();
-    private static readonly List<UiShortcut> Shortcuts = new();
+    private static readonly List<Shortcut> Shortcuts = new();
     private static Widget? _focusCandidate;
     private static Widget? _dropCandidate;
+    private static Widget? _hoverCandidate;
+    private static float _hoverStart;
     private static uint _buttonsDown;
     private static uint _pressedThisFrame;
     private static uint _releasedThisFrame;
@@ -54,32 +56,40 @@ public static partial class Ui
     public static float DragThreshold { get; set; } = 4;
     public static float FloatingZIndex { get; internal set; }
     public static int WarmupFrames { get; set; } = 2;
-    public static UiColor WarmupColor { get; set; } = UiColor.Rgb(24, 26, 32);
+    public static Color WarmupColor { get; set; } = Color.Rgb(24, 26, 32);
     public static int FrameCount => _frameCount;
-    internal static UiColor? WarmupOverlay { get; private set; }
+    internal static Color? WarmupOverlay { get; private set; }
     private static int _frameCount;
     public static int PressClicks { get; private set; }
     public static int ReleaseClicks { get; private set; }
 
-    public static bool PointerDown => IsButtonDown(UiMouseButton.Left);
-    internal static bool PointerPressedThisFrame => WasPressed(UiMouseButton.Left);
-    internal static bool PointerReleasedThisFrame => WasReleased(UiMouseButton.Left);
+    public static bool PointerDown => IsButtonDown(MouseButton.Left);
+    internal static bool PointerPressedThisFrame => WasPressed(MouseButton.Left);
+    internal static bool PointerReleasedThisFrame => WasReleased(MouseButton.Left);
 
     public static event Action<KeyboardEventData>? UnhandledKeyDown;
 
-    public static bool IsButtonDown(UiMouseButton button)
+    /// <summary>
+    /// Bit for a button within the tracked-button masks. DenOfIz numbers buttons from 1
+    /// (SDL convention), so bit 0 is unused.
+    /// </summary>
+    internal static uint Bit(MouseButton button) => 1u << (int)button;
+
+    internal static bool IsTracked(MouseButton button) => button >= MouseButton.Left && button <= MouseButton.X2;
+
+    public static bool IsButtonDown(MouseButton button)
     {
-        return (_buttonsDown & (1u << (int)button)) != 0;
+        return (_buttonsDown & Bit(button)) != 0;
     }
 
-    public static bool WasPressed(UiMouseButton button)
+    public static bool WasPressed(MouseButton button)
     {
-        return (_pressedThisFrame & (1u << (int)button)) != 0;
+        return (_pressedThisFrame & Bit(button)) != 0;
     }
 
-    public static bool WasReleased(UiMouseButton button)
+    public static bool WasReleased(MouseButton button)
     {
-        return (_releasedThisFrame & (1u << (int)button)) != 0;
+        return (_releasedThisFrame & Bit(button)) != 0;
     }
 
     internal static uint AllocateWidgetId()
@@ -102,6 +112,30 @@ public static partial class Ui
     public static float NextZIndex()
     {
         return _nextZ++;
+    }
+
+    /// <summary>
+    /// The widget under the pointer once it has been hovered continuously for <paramref name="delay"/>
+    /// seconds, otherwise null. Holding or clicking a button restarts the wait. Call it from Update
+    /// (it reads the hover published by the previous frame) to drive hover-triggered overlays:
+    /// <c>if (Ui.HoverDelay(0.6f) == target) tip.ShowAt(Ui.PointerPosition);</c>
+    /// Walk <see cref="Widget.Parent"/> from the result if the trigger sits on an ancestor.
+    /// </summary>
+    public static Widget? HoverDelay(float delay)
+    {
+        var hovered = HoveredWidget;
+        if (hovered != _hoverCandidate || _pressedThisFrame != 0)
+        {
+            _hoverCandidate = hovered;
+            _hoverStart = ElapsedSeconds;
+        }
+
+        if (_hoverCandidate == null || PointerDown || ElapsedSeconds - _hoverStart < delay)
+        {
+            return null;
+        }
+
+        return _hoverCandidate;
     }
 
     internal static void RequestFocus(Widget widget)
@@ -159,14 +193,14 @@ public static partial class Ui
         }
     }
 
-    public static UiShortcut AddShortcut(KeyCode key, Action action, bool ctrl = false, bool shift = false, bool alt = false)
+    public static Shortcut AddShortcut(KeyCode key, Action action, bool ctrl = false, bool shift = false, bool alt = false)
     {
-        var shortcut = new UiShortcut(key, ctrl, shift, alt, action);
+        var shortcut = new Shortcut(key, ctrl, shift, alt, action);
         Shortcuts.Add(shortcut);
         return shortcut;
     }
 
-    public static void RemoveShortcut(UiShortcut shortcut)
+    public static void RemoveShortcut(Shortcut shortcut)
     {
         Shortcuts.Remove(shortcut);
     }
@@ -220,14 +254,14 @@ public static partial class Ui
             }
         }
 
-        if (DragSource != null && !IsButtonDown(UiMouseButton.Left))
+        if (DragSource != null && !IsButtonDown(MouseButton.Left))
         {
             var source = DragSource;
             var target = _dropCandidate;
             var payload = DragPayload;
             DragSource = null;
             DragPayload = null;
-            target?.ReceiveDrop(new UiDropEvent(source, payload, PointerPosition));
+            target?.ReceiveDrop(new DropEvent(source, payload, PointerPosition));
             source.FinishDrag();
         }
 
@@ -251,25 +285,6 @@ public static partial class Ui
         WheelDelta = 0;
     }
 
-    private static bool TryMapButton(MouseButton button, out UiMouseButton mapped)
-    {
-        switch (button)
-        {
-            case MouseButton.Left:
-                mapped = UiMouseButton.Left;
-                return true;
-            case MouseButton.Middle:
-                mapped = UiMouseButton.Middle;
-                return true;
-            case MouseButton.Right:
-                mapped = UiMouseButton.Right;
-                return true;
-            default:
-                mapped = UiMouseButton.Left;
-                return false;
-        }
-    }
-
     private static void HandleWidgetEvent(ref Event ev)
     {
         switch (ev.Type)
@@ -277,16 +292,16 @@ public static partial class Ui
             case EventType.MouseMotion:
                 PointerPosition = new Vector2(ev.MouseMotion.X, ev.MouseMotion.Y);
                 break;
-            case EventType.MouseButtonDown when TryMapButton(ev.MouseButton.Button, out var down):
+            case EventType.MouseButtonDown when IsTracked(ev.MouseButton.Button):
                 PointerPosition = new Vector2(ev.MouseButton.X, ev.MouseButton.Y);
-                _buttonsDown |= 1u << (int)down;
-                _pressedThisFrame |= 1u << (int)down;
+                _buttonsDown |= Bit(ev.MouseButton.Button);
+                _pressedThisFrame |= Bit(ev.MouseButton.Button);
                 PressClicks = (int)ev.MouseButton.Clicks;
                 break;
-            case EventType.MouseButtonUp when TryMapButton(ev.MouseButton.Button, out var up):
+            case EventType.MouseButtonUp when IsTracked(ev.MouseButton.Button):
                 PointerPosition = new Vector2(ev.MouseButton.X, ev.MouseButton.Y);
-                _buttonsDown &= ~(1u << (int)up);
-                _releasedThisFrame |= 1u << (int)up;
+                _buttonsDown &= ~Bit(ev.MouseButton.Button);
+                _releasedThisFrame |= Bit(ev.MouseButton.Button);
                 ReleaseClicks = (int)ev.MouseButton.Clicks;
                 break;
             case EventType.MouseWheel:

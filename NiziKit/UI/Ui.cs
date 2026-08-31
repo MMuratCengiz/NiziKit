@@ -60,7 +60,8 @@ public static partial class Ui
         GraphicsContext.OnResize -= HandleResize;
         GraphicsContext.WaitIdle();
         FontAwesome.Shutdown();
-        UiFonts.Shutdown();
+        Fonts.Shutdown();
+        Widgets.Text.Clear();
         _clay.Dispose();
         _clay = null;
         IdCache.Clear();
@@ -115,57 +116,29 @@ public static partial class Ui
         _clay?.SetViewportSize(width, height);
     }
 
-    public static UiElement Element(string? id = null)
+    public static Element Element(string? id = null)
     {
-        return new UiElement(id == null ? 0u : Id(id), ClayLayoutDirection.LeftToRight);
+        return new Element(id == null ? 0u : Id(id), ClayLayoutDirection.LeftToRight);
     }
 
-    public static UiElement Row(string? id = null)
+    public static Element Row(string? id = null)
     {
         return Element(id);
     }
 
-    public static UiElement Column(string? id = null)
+    public static Element Column(string? id = null)
     {
-        return new UiElement(id == null ? 0u : Id(id), ClayLayoutDirection.TopToBottom);
+        return new Element(id == null ? 0u : Id(id), ClayLayoutDirection.TopToBottom);
     }
 
-    public static void Text(string text, int fontSize, UiColor color)
+    public static void Text(string text, int fontSize, Color color)
     {
         var desc = ClayTextDesc.Default();
         desc.TextColor = color.ToClay();
         desc.FontId = 0;
         desc.FontSize = (ushort)fontSize;
         desc.WrapMode = ClayTextWrapMode.Words;
-        UiText.Draw(text, in desc);
-    }
-
-    /// <summary>Declares a button, returns true if it was clicked this frame.</summary>
-    public static bool Button(string id, string label, UiButtonStyle style = default)
-    {
-        if (style.FontSize == 0)
-        {
-            style = UiButtonStyle.Default;
-        }
-
-        var elementId = Id(id);
-        var hovered = PointerOver(elementId);
-        var pressed = Clay.ElementPressed(elementId);
-        var background = pressed ? style.Pressed : hovered ? style.Hover : style.Background;
-
-        var element = Element()
-            .WithId(elementId)
-            .Height(style.Height > 0 ? style.Height : 32)
-            .Background(background)
-            .CornerRadius(6)
-            .CenterChildren();
-        element = style.Width > 0 ? element.Width(style.Width) : element.GrowWidth();
-        using (element.Open())
-        {
-            Text(label, style.FontSize, style.TextColor);
-        }
-
-        return Clay.ElementClicked(elementId);
+        Widgets.Text.Draw(text, in desc);
     }
 
     public static void Spacer()
@@ -204,26 +177,4 @@ public static partial class Ui
     {
         return Clay.PointerOver(id);
     }
-}
-
-public struct UiButtonStyle
-{
-    public UiColor Background;
-    public UiColor Hover;
-    public UiColor Pressed;
-    public UiColor TextColor;
-    public int FontSize;
-    public float Width;
-    public float Height;
-
-    public static UiButtonStyle Default => new()
-    {
-        Background = UiColor.Rgb(58, 66, 86),
-        Hover = UiColor.Rgb(74, 84, 108),
-        Pressed = UiColor.Rgb(46, 52, 70),
-        TextColor = UiColor.Rgb(235, 235, 240),
-        FontSize = 14,
-        Width = 0,
-        Height = 32
-    };
 }

@@ -92,10 +92,10 @@ public class PongGame(GameDesc? desc) : Game(desc)
         }
     }
 
-    private static readonly UiColor TableBackground = UiColor.Rgba(20, 20, 30, 140);
-    private static readonly UiColor TableBorder = UiColor.Rgba(110, 110, 130, 180);
-    private static readonly UiColor HeaderText = UiColor.Rgb(180, 180, 200);
-    private static readonly UiColor CellText = UiColor.Rgb(255, 255, 255);
+    private static readonly Color TableBackground = Color.Rgba(20, 20, 30, 140);
+    private static readonly Color TableBorder = Color.Rgba(110, 110, 130, 180);
+    private static readonly Color HeaderText = Color.Rgb(180, 180, 200);
+    private static readonly Color CellText = Color.Rgb(255, 255, 255);
 
     private const float LabelCellWidth = 70;
     private const float ScoreCellWidth = 40;
@@ -127,7 +127,7 @@ public class PongGame(GameDesc? desc) : Game(desc)
         }
     }
 
-    private static void TableCell(string text, float width, UiColor color)
+    private static void TableCell(string text, float width, Color color)
     {
         using (Ui.Element().Fixed(width, CellHeight).CenterChildren().Open())
         {

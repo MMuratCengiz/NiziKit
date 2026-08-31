@@ -13,11 +13,9 @@ public class Dropdown : HStack
     {
         Width = 180;
         Height = 32;
-        Padding = new UiThickness(10, 0);
+        Padding = new Thickness(10, 0);
         Gap = 8;
         CornerRadius = 6;
-        Background = UiColor.Rgb(28, 30, 38);
-        BorderColor = UiColor.Rgb(70, 76, 94);
         Focusable = true;
         _label = new Label { Wrap = false };
         _caret = new Label(FontAwesome.CaretDown) { Wrap = false, FontId = FontAwesome.FontId };
@@ -35,21 +33,38 @@ public class Dropdown : HStack
     public List<string> Items { get; } = new();
     public string Placeholder { get; set; } = "Select...";
     public int FontSize { get; set; } = 14;
-    public ushort FontId { get; set; } = UiFonts.DefaultFontId;
+    public ushort FontId { get; set; } = Fonts.DefaultFontId;
     public float MaxListHeight { get; set; } = 240;
     public float RowHeight { get; set; } = 28;
-    public UiColor TextColor { get; set; } = UiColor.Rgb(235, 235, 240);
-    public UiColor DisabledTextColor { get; set; } = UiColor.Rgb(160, 165, 180);
-    public UiColor PlaceholderColor { get; set; } = UiColor.Rgb(120, 125, 140);
-    public UiColor CaretColor { get; set; } = UiColor.Rgb(160, 165, 180);
-    public UiColor HoverBackground { get; set; } = UiColor.Rgb(44, 48, 60);
-    public UiColor PressedBackground { get; set; } = UiColor.Rgb(46, 52, 70);
-    public UiColor DisabledBackground { get; set; } = UiColor.Rgb(46, 50, 62);
-    public UiColor FocusBorderColor { get; set; } = UiColor.Rgb(88, 130, 240);
-    public UiColor RowHoverBackground { get; set; } = UiColor.Rgb(110, 150, 250);
-    public UiColor RowSelectedBackground { get; set; } = UiColor.Rgba(88, 130, 240, 90);
+
+    /// <summary>Color of the <see cref="Placeholder"/> text. Having no selection is not an interaction state, so it sits outside <see cref="Style"/>.</summary>
+    public Color PlaceholderColor { get; set; } = Color.Rgb(120, 125, 140);
+
+    /// <summary>Color of the caret glyph, which is a sub-element rather than a state of the box.</summary>
+    public Color CaretColor { get; set; } = Color.Rgb(160, 165, 180);
+
+    /// <summary>Theming for the closed box. An open dropdown resolves as hovered and focused.</summary>
+    public Style Style { get; set; } = new()
+    {
+        Normal = new StyleState { Background = Color.Rgb(28, 30, 38), Border = Color.Rgb(70, 76, 94), BorderWidth = 1, Text = Color.Rgb(235, 235, 240) },
+        Hover = new StyleState { Background = Color.Rgb(44, 48, 60) },
+        Pressed = new StyleState { Background = Color.Rgb(46, 52, 70) },
+        Disabled = new StyleState { Background = Color.Rgb(46, 50, 62), Text = Color.Rgb(160, 165, 180) },
+        Focused = new StyleState { Border = Color.Rgb(88, 130, 240), BorderWidth = 1 }
+    };
+
+    /// <summary>Theming for the list rows. The selected row resolves through <see cref="Widgets.Style.Checked"/>.</summary>
+    public Style RowStyle { get; set; } = new()
+    {
+        Normal = new StyleState { Text = Color.Rgb(235, 235, 240) },
+        Checked = new StyleState { Background = Color.Rgba(88, 130, 240, 90) },
+        Hover = new StyleState { Background = Color.Rgb(110, 150, 250) },
+        Disabled = new StyleState { Text = Color.Rgb(160, 165, 180) }
+    };
 
     public Popup Popup => _popup;
+    public Label TextLabel => _label;
+    public Label Caret => _caret;
 
     public int SelectedIndex
     {
@@ -75,6 +90,7 @@ public class Dropdown : HStack
 
     public bool IsOpen => _popup.IsOpen;
 
+    /// <summary>Builds the widget for a row. Rows built here are left entirely to the caller; <see cref="RowStyle"/> only paints the row background.</summary>
     public Func<string, int, Widget>? ItemTemplate { get; set; }
 
     public event Action<Dropdown>? SelectionChanged;
@@ -92,8 +108,8 @@ public class Dropdown : HStack
 
         RebuildRows();
         var width = Ui.Clay.PixelsToPoints(Bounds.Width);
-        _popup.Width = width > 0 ? UiSize.Fixed(width) : UiSize.Fit;
-        _popup.Height = UiSize.Fit.WithMax(MaxListHeight);
+        _popup.Width = width > 0 ? Sizing.Fixed(width) : Sizing.Fit;
+        _popup.Height = Sizing.Fit.WithMax(MaxListHeight);
         _popup.ScrollVertical = Items.Count * (RowHeight + _popup.Gap) > MaxListHeight;
         _popup.ClipChildren = _popup.ScrollVertical;
         _popup.Open(this);
@@ -120,9 +136,9 @@ public class Dropdown : HStack
         Focus();
     }
 
-    protected override void OnClick(UiMouseButton button)
+    protected override void OnClick(MouseButton button)
     {
-        if (button != UiMouseButton.Left)
+        if (button != MouseButton.Left)
         {
             return;
         }
@@ -171,54 +187,59 @@ public class Dropdown : HStack
     protected override void ApplyDeclaration(ref ClayElementDeclaration decl)
     {
         base.ApplyDeclaration(ref decl);
+
+        var state = Style.Resolve(this);
+        if (IsOpen)
+        {
+            state.Layer(in Style.Hover);
+            state.Layer(in Style.Focused);
+        }
+
+        state.Apply(this, ref decl);
+
         var selected = SelectedItem;
         _label.Text = selected ?? Placeholder;
         _label.FontSize = FontSize;
         _label.FontId = FontId;
-        _label.Color = !IsEnabled ? DisabledTextColor : selected != null ? TextColor : PlaceholderColor;
+        _label.Color = selected == null && IsEnabled ? PlaceholderColor : state.Text ?? PlaceholderColor;
         _caret.FontSize = FontSize;
-        _caret.Color = IsEnabled ? CaretColor : DisabledTextColor;
-
-        UiColor? color = !IsEnabled ? DisabledBackground : IsPressed ? PressedBackground : IsHovered || IsOpen ? HoverBackground : Background;
-        if (color is { } background)
-        {
-            decl.BackgroundColor = background.ToClay();
-        }
-
-        UiColor? border = IsFocused || IsOpen ? FocusBorderColor : BorderColor;
-        if (border is { } borderColor)
-        {
-            decl.Border.Color = borderColor.ToClay();
-            decl.Border.Width = ClayBorderWidth.CreateUniform(BorderWidth);
-        }
+        _caret.Color = IsEnabled ? CaretColor : state.Text ?? CaretColor;
     }
 
     private sealed class DropdownRow : Widget
     {
         private readonly Dropdown _owner;
         private readonly int _index;
-        private readonly Widget? _content;
+        private readonly Widget _content;
+        private readonly Label? _label;
 
         public DropdownRow(Dropdown owner, int index)
         {
             _owner = owner;
             _index = index;
-            if (owner.ItemTemplate != null && index < owner.Items.Count)
+            var item = owner.Items[index];
+            if (owner.ItemTemplate != null)
             {
-                _content = owner.ItemTemplate(owner.Items[index], index);
-                _content.Parent = this;
+                _content = owner.ItemTemplate(item, index);
             }
-            Width = UiSize.Grow;
+            else
+            {
+                _label = new Label(item) { Wrap = false, FontSize = owner.FontSize, FontId = owner.FontId };
+                _content = _label;
+            }
+
+            _content.Parent = this;
+            Width = Sizing.Grow;
             Height = owner.RowHeight;
-            Padding = new UiThickness(8, 0);
+            Padding = new Thickness(8, 0);
             CornerRadius = 4;
         }
 
         protected override bool TracksPointer => true;
 
-        protected override void OnClick(UiMouseButton button)
+        protected override void OnClick(MouseButton button)
         {
-            if (button == UiMouseButton.Left)
+            if (button == MouseButton.Left)
             {
                 _owner.Select(_index);
             }
@@ -228,37 +249,23 @@ public class Dropdown : HStack
         {
             base.ApplyDeclaration(ref decl);
             decl.Layout.ChildAlignment.Y = ClayAlignmentY.Center;
-            UiColor? color = IsHovered ? _owner.RowHoverBackground : _index == _owner._selectedIndex ? _owner.RowSelectedBackground : null;
-            if (color is { } background)
+
+            var state = _owner.RowStyle.Resolve(this, _index == _owner.SelectedIndex);
+            state.Apply(this, ref decl);
+            if (_label != null && state.Text is { } text)
             {
-                decl.BackgroundColor = background.ToClay();
+                _label.Color = text;
             }
         }
 
         protected override void CollectChildren(List<Widget> frame)
         {
-            _content?.CollectFrame(frame);
+            _content.CollectFrame(frame);
         }
 
         protected override void BuildContent()
         {
-            if (_index >= _owner.Items.Count)
-            {
-                return;
-            }
-
-            if (_content != null)
-            {
-                _content.Build();
-                return;
-            }
-
-            var desc = ClayTextDesc.Default();
-            desc.TextColor = _owner.TextColor.ToClay();
-            desc.FontId = _owner.FontId;
-            desc.FontSize = (ushort)_owner.FontSize;
-            desc.WrapMode = ClayTextWrapMode.None;
-            Ui.Clay.Text(_owner.Items[_index], in desc);
+            _content.Build();
         }
     }
 }

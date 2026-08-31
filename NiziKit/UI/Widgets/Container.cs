@@ -45,16 +45,16 @@ public abstract class Container : Widget, IEnumerable<Widget>
     }
 
     public WidgetCollection Children { get; }
-    public UiOrientation Orientation { get; init; } = UiOrientation.Horizontal;
+    public Orientation Orientation { get; init; } = Orientation.Horizontal;
     public float Gap { get; set; }
-    public UiAlign AlignX { get; init; } = UiAlign.Start;
-    public UiAlign AlignY { get; set; } = UiAlign.Start;
+    public Align AlignX { get; init; } = Align.Start;
+    public Align AlignY { get; set; } = Align.Start;
     public bool ScrollVertical { get; set; }
     public bool ScrollHorizontal { get; set; }
     public bool ShowScrollbar { get; set; } = true;
     public float ScrollbarWidth { get; set; } = 6;
-    public UiColor ScrollbarColor { get; set; } = UiColor.Rgb(70, 76, 94);
-    public UiColor ScrollbarActiveColor { get; set; } = UiColor.Rgb(160, 165, 180);
+    public Color ScrollbarColor { get; set; } = Color.Rgb(70, 76, 94);
+    public Color ScrollbarActiveColor { get; set; } = Color.Rgb(160, 165, 180);
 
     private ScrollThumb? _thumb;
 
@@ -149,7 +149,7 @@ public abstract class Container : Widget, IEnumerable<Widget>
     protected override void ApplyDeclaration(ref ClayElementDeclaration decl)
     {
         base.ApplyDeclaration(ref decl);
-        decl.Layout.LayoutDirection = Orientation == UiOrientation.Vertical ? ClayLayoutDirection.TopToBottom : ClayLayoutDirection.LeftToRight;
+        decl.Layout.LayoutDirection = Orientation == Orientation.Vertical ? ClayLayoutDirection.TopToBottom : ClayLayoutDirection.LeftToRight;
         decl.Layout.ChildGap = (ushort)Gap;
         decl.Layout.ChildAlignment.X = AlignX.ToClayX();
         decl.Layout.ChildAlignment.Y = AlignY.ToClayY();
@@ -185,11 +185,11 @@ public abstract class Container : Widget, IEnumerable<Widget>
 internal sealed class ScrollThumb : Widget
 {
     private readonly Container _owner;
-    private readonly UiFloating _floating = new()
+    private readonly Floating _floating = new()
     {
-        AttachTo = UiAttachTo.Parent,
-        ElementAnchor = UiAnchor.TopRight,
-        ParentAnchor = UiAnchor.TopRight,
+        AttachTo = AttachTo.Parent,
+        ElementAnchor = AnchorPoint.TopRight,
+        ParentAnchor = AnchorPoint.TopRight,
         CapturePointer = true
     };
 
@@ -243,7 +243,7 @@ public class StackPanel : Container
     {
     }
 
-    public StackPanel(UiOrientation orientation)
+    public StackPanel(Orientation orientation)
     {
         Orientation = orientation;
     }
@@ -251,22 +251,22 @@ public class StackPanel : Container
 
 public class HStack : StackPanel
 {
-    public HStack() : base(UiOrientation.Horizontal)
+    public HStack() : base(Orientation.Horizontal)
     {
-        AlignY = UiAlign.Center;
+        AlignY = Align.Center;
     }
 }
 
-public class VStack() : StackPanel(UiOrientation.Vertical);
+public class VStack() : StackPanel(Orientation.Vertical);
 
 public class ScrollView : StackPanel
 {
-    public ScrollView() : base(UiOrientation.Vertical)
+    public ScrollView() : base(Orientation.Vertical)
     {
         ScrollVertical = true;
         ClipChildren = true;
-        Width = UiSize.Grow;
-        Height = UiSize.Grow;
+        Width = Sizing.Grow;
+        Height = Sizing.Grow;
     }
 }
 
@@ -274,8 +274,8 @@ public class Spacer : Widget
 {
     public Spacer()
     {
-        Width = UiSize.Grow;
-        Height = UiSize.Grow;
+        Width = Sizing.Grow;
+        Height = Sizing.Grow;
     }
 
     public Spacer(float size)
@@ -289,8 +289,8 @@ public class Divider : Widget
 {
     public Divider()
     {
-        Width = UiSize.Grow;
+        Width = Sizing.Grow;
         Height = 1;
-        Background = UiColor.Rgb(70, 76, 94);
+        Background = Color.Rgb(70, 76, 94);
     }
 }

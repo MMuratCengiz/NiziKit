@@ -5,7 +5,7 @@ namespace NiziKit.UI.Widgets;
 
 public class Label : Widget
 {
-    private readonly UiTextCache _cache = new();
+    private readonly TextCache _cache = new();
 
     public Label()
     {
@@ -24,11 +24,11 @@ public class Label : Widget
     public string Text { get; set; } = "";
     public Func<string>? TextBinding { get; set; }
     public int FontSize { get; set; } = 14;
-    public ushort FontId { get; set; } = UiFonts.DefaultFontId;
-    public UiColor Color { get; set; } = UiColor.Rgb(235, 235, 240);
+    public ushort FontId { get; set; } = Fonts.DefaultFontId;
+    public Color Color { get; set; } = Color.Rgb(235, 235, 240);
     public bool Wrap { get; init; } = true;
-    public UiAlign TextAlign { get; init; } = UiAlign.Start;
-    public UiAlign VerticalAlign { get; init; } = UiAlign.Start;
+    public Align TextAlign { get; init; } = Align.Start;
+    public Align VerticalAlign { get; init; } = Align.Start;
 
     public Vector2 Measure()
     {
@@ -66,18 +66,5 @@ public class Label : Widget
         desc.WrapMode = Wrap ? ClayTextWrapMode.Words : ClayTextWrapMode.None;
         desc.TextAlignment = TextAlign.ToClayText();
         Ui.Clay.Text(view, in desc);
-    }
-}
-
-public class Heading : Label
-{
-    public Heading()
-    {
-        FontSize = 20;
-    }
-
-    public Heading(string text) : base(text)
-    {
-        FontSize = 20;
     }
 }

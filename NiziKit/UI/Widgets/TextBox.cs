@@ -5,7 +5,7 @@ using DenOfIz;
 
 namespace NiziKit.UI.Widgets;
 
-internal sealed class UiTextBuffer
+internal sealed class TextBuffer
 {
     private byte[] _bytes = GC.AllocateUninitializedArray<byte>(64, pinned: true);
     private int[] _offsets = new int[16];
@@ -201,8 +201,8 @@ internal static class TextEditing
 public class TextBox : Widget
 {
     private readonly StringBuilder _buffer = new();
-    private readonly UiTextBuffer _display = new();
-    private readonly UiTextCache _placeholder = new();
+    private readonly TextBuffer _display = new();
+    private readonly TextCache _placeholder = new();
     private string? _text;
     private string? _displayText;
     private bool _displayPassword;
@@ -223,10 +223,10 @@ public class TextBox : Widget
         Focusable = true;
         Width = 200;
         Height = 32;
-        Padding = new UiThickness(10, 0);
+        Padding = new Thickness(10, 0);
         CornerRadius = 6;
-        Background = UiColor.Rgb(28, 30, 38);
-        BorderColor = UiColor.Rgb(70, 76, 94);
+        Background = Color.Rgb(28, 30, 38);
+        BorderColor = Color.Rgb(70, 76, 94);
         ClipChildren = true;
     }
 
@@ -252,12 +252,12 @@ public class TextBox : Widget
     public string Placeholder { get; init; } = "";
     public int MaxLength { get; set; } = int.MaxValue;
     public int FontSize { get; set; } = 14;
-    public ushort FontId { get; set; } = UiFonts.DefaultFontId;
-    public UiColor TextColor { get; set; } = UiColor.Rgb(235, 235, 240);
-    public UiColor DisabledTextColor { get; set; } = UiColor.Rgb(160, 165, 180);
-    public UiColor PlaceholderColor { get; set; } = UiColor.Rgb(120, 125, 140);
-    public UiColor FocusBorderColor { get; set; } = UiColor.Rgb(88, 130, 240);
-    public UiColor SelectionColor { get; set; } = UiColor.Rgba(88, 130, 240, 90);
+    public ushort FontId { get; set; } = Fonts.DefaultFontId;
+    public Color TextColor { get; set; } = Color.Rgb(235, 235, 240);
+    public Color DisabledTextColor { get; set; } = Color.Rgb(160, 165, 180);
+    public Color PlaceholderColor { get; set; } = Color.Rgb(120, 125, 140);
+    public Color FocusBorderColor { get; set; } = Color.Rgb(88, 130, 240);
+    public Color SelectionColor { get; set; } = Color.Rgba(88, 130, 240, 90);
     public bool IsPassword { get; init; }
     public char PasswordChar { get; set; } = '•';
     public bool ReadOnly { get; init; }
@@ -545,7 +545,7 @@ public class TextBox : Widget
             return;
         }
 
-        if (!Ui.IsButtonDown(UiMouseButton.Left))
+        if (!Ui.IsButtonDown(MouseButton.Left))
         {
             _selecting = false;
             if (_anchor == _cursor)
@@ -694,7 +694,7 @@ public class TextBox : Widget
         base.ApplyDeclaration(ref decl);
         UpdateMetrics();
         decl.Layout.ChildAlignment.Y = ClayAlignmentY.Center;
-        UiColor? border = IsFocused ? FocusBorderColor : BorderColor;
+        Color? border = IsFocused ? FocusBorderColor : BorderColor;
         if (border is { } borderColor)
         {
             decl.Border.Color = borderColor.ToClay();

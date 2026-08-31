@@ -16,7 +16,7 @@ public class Slider : Widget
 
     public Slider()
     {
-        Width = UiSize.Grow;
+        Width = Sizing.Grow;
         Height = 20;
         Focusable = true;
     }
@@ -33,17 +33,14 @@ public class Slider : Widget
     public float Step { get; init; }
     public float KnobSize { get; set; } = 14;
     public float TrackHeight { get; set; } = 4;
-    public UiColor? TrackColor { get; set; }
-    public UiColor? FillColor { get; set; }
-    public UiColor? KnobColor { get; set; }
     public SliderStyle Style { get; set; } = new();
     public bool ShowValue { get; init; }
     public string ValueFormat { get; init; } = "0.##";
     public float ValueWidth { get; set; } = 40;
-    public UiColor ValueColor { get; set; } = UiColor.Rgb(160, 165, 180);
-    public UiColor DisabledValueColor { get; set; } = UiColor.Rgb(120, 125, 140);
+    public Color ValueColor { get; set; } = Color.Rgb(160, 165, 180);
+    public Color DisabledValueColor { get; set; } = Color.Rgb(120, 125, 140);
     public int FontSize { get; set; } = 14;
-    public ushort FontId { get; set; } = UiFonts.DefaultFontId;
+    public ushort FontId { get; set; } = Fonts.DefaultFontId;
 
     public bool Vertical
     {
@@ -216,7 +213,7 @@ public class Slider : Widget
             track.Layout.ChildAlignment.Y = ClayAlignmentY.Center;
         }
 
-        track.BackgroundColor = (TrackColor ?? style.Track).ToClay();
+        track.BackgroundColor = style.Track.ToClay();
         track.BorderRadius = ClayBorderRadius.CreateUniform(TrackHeight * 0.5f);
         Ui.Clay.OpenElement(in track);
         {
@@ -232,8 +229,7 @@ public class Slider : Widget
                 fill.Layout.Sizing.Height = ClaySizingAxis.Grow(0, float.MaxValue);
             }
 
-            var fillColor = IsEnabled ? style.Fill : style.FillDisabled;
-            fill.BackgroundColor = (FillColor ?? fillColor).ToClay();
+            fill.BackgroundColor = (IsEnabled ? style.Fill : style.FillDisabled).ToClay();
             fill.BorderRadius = ClayBorderRadius.CreateUniform(TrackHeight * 0.5f);
             Ui.Clay.OpenElement(in fill);
             Ui.Clay.CloseElement();
@@ -241,8 +237,7 @@ public class Slider : Widget
             var knob = ClayElementDeclaration.Default();
             knob.Layout.Sizing.Width = ClaySizingAxis.Fixed(KnobSize);
             knob.Layout.Sizing.Height = ClaySizingAxis.Fixed(KnobSize);
-            var knobColor = active ? style.KnobHover : style.Knob;
-            knob.BackgroundColor = (KnobColor ?? knobColor).ToClay();
+            knob.BackgroundColor = (active ? style.KnobHover : style.Knob).ToClay();
             knob.BorderRadius = ClayBorderRadius.CreateUniform(KnobSize * 0.5f);
             if (IsFocused)
             {

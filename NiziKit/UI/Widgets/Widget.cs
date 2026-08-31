@@ -5,7 +5,7 @@ namespace NiziKit.UI.Widgets;
 
 public abstract class Widget
 {
-    private const uint LeftBit = 1u << (int)UiMouseButton.Left;
+    private const uint LeftBit = 1u << (int)MouseButton.Left;
 
     private uint _pressStarted;
     private bool _dragCandidate;
@@ -16,7 +16,7 @@ public abstract class Widget
     private bool _exiting;
     private float _exitEnd;
     private Vector2 _exitOffset;
-    private UiColor? _exitOverlay;
+    private Color? _exitOverlay;
     private Action? _exitCompleted;
 
     public uint Id { get; } = Ui.AllocateWidgetId();
@@ -31,23 +31,22 @@ public abstract class Widget
     public bool Focusable { get; init; }
     public bool Draggable { get; set; }
     public bool AllowDrop { get; set; }
-    public string? Tooltip { get; set; }
     public Action<Widget>? OnUpdate { get; set; }
 
-    public UiSize Width { get; set; } = UiSize.Fit;
-    public UiSize Height { get; set; } = UiSize.Fit;
-    public UiThickness Padding { get; set; }
-    public UiThickness Margin { get; set; }
-    public UiColor? Background { get; set; }
-    public float CornerRadius { get; init; }
-    public UiColor? BorderColor { get; set; }
+    public Sizing Width { get; set; } = Sizing.Fit;
+    public Sizing Height { get; set; } = Sizing.Fit;
+    public Thickness Padding { get; set; }
+    public Thickness Margin { get; set; }
+    public Color? Background { get; set; }
+    public CornerRadius CornerRadius { get; init; }
+    public Color? BorderColor { get; set; }
     public float BorderWidth { get; set; } = 1;
     public float BorderBetweenChildren { get; set; }
     public bool ClipChildren { get; set; }
     public float AspectRatio { get; init; }
     public ClayTransitionDesc? Transition { get; set; }
-    public UiFloating? Floating { get; set; }
-    public UiColor? Overlay { get; set; }
+    public Floating? Floating { get; set; }
+    public Color? Overlay { get; set; }
 
     public bool IsVisible { get; private set; } = true;
     public bool IsEnabled { get; private set; } = true;
@@ -64,17 +63,17 @@ public abstract class Widget
     public event Action<Widget>? RightClicked;
     public event Action<Widget>? MiddleClicked;
     public event Action<Widget>? DoubleClicked;
-    public event Action<Widget, UiPointerEvent>? Pressed;
-    public event Action<Widget, UiPointerEvent>? Released;
+    public event Action<Widget, PointerEvent>? Pressed;
+    public event Action<Widget, PointerEvent>? Released;
     public event Action<Widget, float>? Scrolled;
     public event Action<Widget>? PointerEntered;
     public event Action<Widget>? PointerExited;
-    public event Action<Widget, UiDragEvent>? DragStarted;
-    public event Action<Widget, UiDragEvent>? Dragging;
-    public event Action<Widget, UiDragEvent>? DragEnded;
-    public event Action<Widget, UiDropEvent>? DragEntered;
+    public event Action<Widget, DragEvent>? DragStarted;
+    public event Action<Widget, DragEvent>? Dragging;
+    public event Action<Widget, DragEvent>? DragEnded;
+    public event Action<Widget, DropEvent>? DragEntered;
     public event Action<Widget>? DragLeft;
-    public event Action<Widget, UiDropEvent>? Dropped;
+    public event Action<Widget, DropEvent>? Dropped;
     public event Action<Widget>? FocusGained;
     public event Action<Widget>? FocusLost;
 
@@ -104,7 +103,7 @@ public abstract class Widget
         Clicked != null || RightClicked != null || MiddleClicked != null || DoubleClicked != null ||
         Pressed != null || Released != null || Scrolled != null ||
         PointerEntered != null || PointerExited != null ||
-        Focusable || Draggable || AllowDrop || Tooltip != null;
+        Focusable || Draggable || AllowDrop;
 
     protected internal virtual bool IsKeyActivatable => false;
 
@@ -131,11 +130,11 @@ public abstract class Widget
             return;
         }
 
-        OnClick(UiMouseButton.Left);
+        OnClick(MouseButton.Left);
         Clicked?.Invoke(this);
     }
 
-    public void BeginExit(float duration, Vector2 offset, UiColor? overlay, Action? completed)
+    public void BeginExit(float duration, Vector2 offset, Color? overlay, Action? completed)
     {
         if (Transition is not { Enabled: true })
         {
@@ -162,7 +161,7 @@ public abstract class Widget
 
     public void Raise()
     {
-        Floating ??= new UiFloating { AttachTo = UiAttachTo.Root };
+        Floating ??= new Floating { AttachTo = AttachTo.Root };
         Floating.ZIndex = Ui.NextZIndex();
     }
 
@@ -204,7 +203,7 @@ public abstract class Widget
         return Transition is { Exit.Enabled: true } transition ? transition.Exit.State : ClayTransitionStateDesc.FromScale(1);
     }
 
-    public void FadeIn(UiColor from, float duration = 0.2f)
+    public void FadeIn(Color from, float duration = 0.2f)
     {
         Animate(duration);
         var state = EnterState();
@@ -212,7 +211,7 @@ public abstract class Widget
         EnterFrom(state);
     }
 
-    public void FadeOut(UiColor to, float duration = 0.2f)
+    public void FadeOut(Color to, float duration = 0.2f)
     {
         Animate(duration);
         var state = ExitState();
@@ -327,7 +326,7 @@ public abstract class Widget
             IsDragOver = dragOver;
             if (dragOver)
             {
-                DragEntered?.Invoke(this, new UiDropEvent(Ui.DragSource!, Ui.DragPayload, Ui.PointerPosition));
+                DragEntered?.Invoke(this, new DropEvent(Ui.DragSource!, Ui.DragPayload, Ui.PointerPosition));
             }
             else
             {
@@ -341,15 +340,15 @@ public abstract class Widget
         }
 
         var captured = Ui.DragSource != null && Ui.DragSource != this;
-        for (var b = 0; b < 3; b++)
+        for (var b = (int)MouseButton.Left; b <= (int)MouseButton.X2; b++)
         {
-            var button = (UiMouseButton)b;
-            var bit = 1u << b;
+            var button = (MouseButton)b;
+            var bit = Ui.Bit(button);
             if (Ui.WasPressed(button) && hovered && !captured)
             {
                 _pressStarted |= bit;
-                Pressed?.Invoke(this, new UiPointerEvent(button, Ui.PointerPosition, Ui.PressClicks));
-                if (button == UiMouseButton.Left)
+                Pressed?.Invoke(this, new PointerEvent(button, Ui.PointerPosition, Ui.PressClicks));
+                if (button == MouseButton.Left)
                 {
                     _pressPosition = Ui.PointerPosition;
                     _dragCandidate = Draggable;
@@ -364,13 +363,13 @@ public abstract class Widget
             {
                 if ((_pressStarted & bit) != 0 && hovered)
                 {
-                    Released?.Invoke(this, new UiPointerEvent(button, Ui.PointerPosition, Ui.ReleaseClicks));
+                    Released?.Invoke(this, new PointerEvent(button, Ui.PointerPosition, Ui.ReleaseClicks));
                     if (!_dragging)
                     {
                         OnClick(button);
                         switch (button)
                         {
-                            case UiMouseButton.Left:
+                            case MouseButton.Left:
                                 Clicked?.Invoke(this);
                                 if (Ui.ReleaseClicks >= 2)
                                 {
@@ -378,10 +377,10 @@ public abstract class Widget
                                 }
 
                                 break;
-                            case UiMouseButton.Right:
+                            case MouseButton.Right:
                                 RightClicked?.Invoke(this);
                                 break;
-                            case UiMouseButton.Middle:
+                            case MouseButton.Middle:
                                 MiddleClicked?.Invoke(this);
                                 break;
                         }
@@ -392,24 +391,24 @@ public abstract class Widget
             }
         }
 
-        if (_dragCandidate && !_dragging && (_pressStarted & LeftBit) != 0 && Ui.IsButtonDown(UiMouseButton.Left))
+        if (_dragCandidate && !_dragging && (_pressStarted & LeftBit) != 0 && Ui.IsButtonDown(MouseButton.Left))
         {
             if (Vector2.Distance(Ui.PointerPosition, _pressPosition) >= Ui.DragThreshold)
             {
                 _dragging = true;
                 _lastDragPosition = _pressPosition;
                 Ui.BeginDrag(this);
-                DragStarted?.Invoke(this, new UiDragEvent(UiMouseButton.Left, _pressPosition, Ui.PointerPosition, Vector2.Zero));
+                DragStarted?.Invoke(this, new DragEvent(MouseButton.Left, _pressPosition, Ui.PointerPosition, Vector2.Zero));
             }
         }
 
         if (_dragging && Ui.PointerPosition != _lastDragPosition)
         {
-            Dragging?.Invoke(this, new UiDragEvent(UiMouseButton.Left, _pressPosition, Ui.PointerPosition, Ui.PointerPosition - _lastDragPosition));
+            Dragging?.Invoke(this, new DragEvent(MouseButton.Left, _pressPosition, Ui.PointerPosition, Ui.PointerPosition - _lastDragPosition));
             _lastDragPosition = Ui.PointerPosition;
         }
 
-        if (!Ui.IsButtonDown(UiMouseButton.Left))
+        if (!Ui.IsButtonDown(MouseButton.Left))
         {
             _dragCandidate = false;
         }
@@ -432,10 +431,10 @@ public abstract class Widget
 
         _dragging = false;
         _dragCandidate = false;
-        DragEnded?.Invoke(this, new UiDragEvent(UiMouseButton.Left, _pressPosition, Ui.PointerPosition, Vector2.Zero));
+        DragEnded?.Invoke(this, new DragEvent(MouseButton.Left, _pressPosition, Ui.PointerPosition, Vector2.Zero));
     }
 
-    internal void ReceiveDrop(in UiDropEvent drop)
+    internal void ReceiveDrop(in DropEvent drop)
     {
         IsDragOver = false;
         Dropped?.Invoke(this, drop);
@@ -495,20 +494,20 @@ public abstract class Widget
         }
     }
 
-    private static ClaySizingAxis OuterSizing(UiSize size, float margin)
+    private static ClaySizingAxis OuterSizing(Sizing size, float margin)
     {
         return size.Kind switch
         {
-            UiSizeKind.Fixed => ClaySizingAxis.Fixed(size.Value + margin),
-            UiSizeKind.Fit => ClaySizingAxis.Fit(size.Min + margin, size.Max == float.MaxValue ? float.MaxValue : size.Max + margin),
-            UiSizeKind.Grow => ClaySizingAxis.Grow(size.Min + margin, size.Max == float.MaxValue ? float.MaxValue : size.Max + margin),
+            SizingKind.Fixed => ClaySizingAxis.Fixed(size.Value + margin),
+            SizingKind.Fit => ClaySizingAxis.Fit(size.Min + margin, size.Max == float.MaxValue ? float.MaxValue : size.Max + margin),
+            SizingKind.Grow => ClaySizingAxis.Grow(size.Min + margin, size.Max == float.MaxValue ? float.MaxValue : size.Max + margin),
             _ => size.ToClay()
         };
     }
 
-    private static ClaySizingAxis InnerSizing(UiSize size)
+    private static ClaySizingAxis InnerSizing(Sizing size)
     {
-        return size.Kind is UiSizeKind.Grow or UiSizeKind.Percent ? ClaySizingAxis.Grow(0, float.MaxValue) : size.ToClay();
+        return size.Kind is SizingKind.Grow or SizingKind.Percent ? ClaySizingAxis.Grow(0, float.MaxValue) : size.ToClay();
     }
 
     protected virtual void ApplyDeclaration(ref ClayElementDeclaration decl)
@@ -533,9 +532,9 @@ public abstract class Widget
             decl.OverlayColor = warmup.ToClay();
         }
 
-        if (CornerRadius > 0)
+        if (!CornerRadius.IsZero)
         {
-            decl.BorderRadius = ClayBorderRadius.CreateUniform(CornerRadius);
+            decl.BorderRadius = CornerRadius.ToClay();
         }
 
         if (BorderColor is { } borderColor)
@@ -566,7 +565,7 @@ public abstract class Widget
         if (Floating != null)
         {
             Floating.Apply(ref decl);
-            if (Floating.AttachTo == UiAttachTo.Element && (Floating.Anchor == null || !Floating.Anchor.BuiltThisFrame))
+            if (Floating.AttachTo == AttachTo.Element && (Floating.Anchor == null || !Floating.Anchor.BuiltThisFrame))
             {
                 var bounds = Bounds;
                 decl.Floating.AttachTo = ClayFloatingAttachTo.Root;
@@ -617,7 +616,7 @@ public abstract class Widget
     {
     }
 
-    protected virtual void OnClick(UiMouseButton button)
+    protected virtual void OnClick(MouseButton button)
     {
     }
 

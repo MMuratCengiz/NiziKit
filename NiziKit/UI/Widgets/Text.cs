@@ -5,15 +5,11 @@ using DenOfIz;
 
 namespace NiziKit.UI.Widgets;
 
-public sealed class UiTextCache : IDisposable
+public sealed class TextCache : IDisposable
 {
     private string? _text;
     private byte[]? _bytes;
     private StringView _view;
-
-    public string? Text => _text;
-    public int ByteCount => (int)_view.NumChars;
-    public bool IsEmpty => _view.NumChars == 0;
 
     public StringView Get(string text)
     {
@@ -55,12 +51,6 @@ public sealed class UiTextCache : IDisposable
         return new Vector2(Ui.Clay.PixelsToPoints(dimensions.Width), Ui.Clay.PixelsToPoints(dimensions.Height));
     }
 
-    public void Invalidate()
-    {
-        _text = null;
-        _view = default;
-    }
-
     public void Dispose()
     {
         _text = null;
@@ -93,25 +83,15 @@ public sealed class UiTextCache : IDisposable
     }
 }
 
-public static class UiText
+public static class Text
 {
     private const int SlotCount = 256;
-    private static readonly UiTextCache?[] Slots = new UiTextCache?[SlotCount];
+    private static readonly TextCache?[] Slots = new TextCache?[SlotCount];
 
-    public static UiTextCache Slot(string text)
+    private static TextCache Slot(string text)
     {
         var index = (text.GetHashCode() & int.MaxValue) % SlotCount;
-        return Slots[index] ??= new UiTextCache();
-    }
-
-    public static StringView View(string text)
-    {
-        if (text.Length == 0)
-        {
-            return default;
-        }
-
-        return Slot(text).Get(text);
+        return Slots[index] ??= new TextCache();
     }
 
     public static void Draw(string text, in ClayTextDesc desc)
@@ -124,27 +104,7 @@ public static class UiText
         Slot(text).Draw(text, in desc);
     }
 
-    public static Vector2 Measure(string text, ushort fontId, ushort fontSize)
-    {
-        if (text.Length == 0)
-        {
-            return Vector2.Zero;
-        }
-
-        return Slot(text).Measure(text, fontId, fontSize);
-    }
-
-    public static ClayTextDesc Desc(UiColor color, int fontSize = 14, ushort fontId = UiFonts.DefaultFontId, bool wrap = true, UiAlign align = UiAlign.Start)
-    {
-        var desc = ClayTextDesc.Default();
-        desc.TextColor = color.ToClay();
-        desc.FontId = fontId;
-        desc.FontSize = (ushort)fontSize;
-        desc.WrapMode = wrap ? ClayTextWrapMode.Words : ClayTextWrapMode.None;
-        desc.TextAlignment = align.ToClayText();
-        return desc;
-    }
-
+    /// <summary>Releases the pinned encode buffers. Called from <see cref="Ui.Shutdown"/>.</summary>
     public static void Clear()
     {
         for (var i = 0; i < Slots.Length; i++)

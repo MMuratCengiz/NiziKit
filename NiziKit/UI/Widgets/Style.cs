@@ -2,15 +2,15 @@ using DenOfIz;
 
 namespace NiziKit.UI.Widgets;
 
-public struct UiStyleState
+public struct StyleState
 {
-    public UiColor? Background;
-    public UiColor? Border;
-    public UiColor? Text;
+    public Color? Background;
+    public Color? Border;
+    public Color? Text;
     public float? BorderWidth;
-    public float? CornerRadius;
+    public CornerRadius? CornerRadius;
 
-    public void Layer(in UiStyleState over)
+    public void Layer(in StyleState over)
     {
         if (over.Background.HasValue)
         {
@@ -38,7 +38,11 @@ public struct UiStyleState
         }
     }
 
-    public void Apply(ref ClayElementDeclaration decl)
+    /// <summary>
+    /// Writes the resolved state onto the declaration. A <see cref="Widget.BorderColor"/> set
+    /// directly on the widget always wins over the style's border.
+    /// </summary>
+    public void Apply(Widget widget, ref ClayElementDeclaration decl)
     {
         if (Background is { } background)
         {
@@ -47,10 +51,10 @@ public struct UiStyleState
 
         if (CornerRadius is { } radius)
         {
-            decl.BorderRadius = ClayBorderRadius.CreateUniform(radius);
+            decl.BorderRadius = radius.ToClay();
         }
 
-        if (Border is { } border)
+        if (widget.BorderColor == null && Border is { } border)
         {
             decl.Border.Color = border.ToClay();
             decl.Border.Width = ClayBorderWidth.CreateUniform(BorderWidth ?? 1);
@@ -58,16 +62,16 @@ public struct UiStyleState
     }
 }
 
-public sealed class UiStyle
+public sealed class Style
 {
     private static ClayTransitionDesc? _hoverTransition;
 
-    public UiStyleState Normal;
-    public UiStyleState Hover;
-    public UiStyleState Pressed;
-    public UiStyleState Disabled;
-    public UiStyleState Focused;
-    public UiStyleState Checked;
+    public StyleState Normal;
+    public StyleState Hover;
+    public StyleState Pressed;
+    public StyleState Disabled;
+    public StyleState Focused;
+    public StyleState Checked;
 
     public static ClayTransitionDesc HoverTransition => _hoverTransition ??= CreateHoverTransition(0.12f);
 
@@ -78,7 +82,7 @@ public sealed class UiStyle
         return desc;
     }
 
-    public UiStyleState Resolve(Widget w, bool isChecked = false)
+    public StyleState Resolve(Widget w, bool isChecked = false)
     {
         var result = Normal;
         if (isChecked)
@@ -110,45 +114,46 @@ public sealed class UiStyle
     }
 }
 
+/// <summary>Colors for a slider's sub-parts. Sliders draw three elements, so they take part colors rather than the interaction states of <see cref="Style"/>.</summary>
 public sealed class SliderStyle
 {
-    public UiColor Track = UiColor.Rgb(44, 48, 60);
-    public UiColor Fill = UiColor.Rgb(88, 130, 240);
-    public UiColor FillDisabled = UiColor.Rgb(46, 50, 62);
-    public UiColor Knob = UiColor.Rgb(160, 165, 180);
-    public UiColor KnobHover = UiColor.Rgb(235, 235, 240);
-    public UiColor Focus = UiColor.Rgb(88, 130, 240);
+    public Color Track = Color.Rgb(44, 48, 60);
+    public Color Fill = Color.Rgb(88, 130, 240);
+    public Color FillDisabled = Color.Rgb(46, 50, 62);
+    public Color Knob = Color.Rgb(160, 165, 180);
+    public Color KnobHover = Color.Rgb(235, 235, 240);
+    public Color Focus = Color.Rgb(88, 130, 240);
 }
 
-public static class UiColorExtensions
+public static class ColorExtensions
 {
-    public static UiColor Mix(this UiColor color, UiColor other, float t)
+    public static Color Mix(this Color color, Color other, float t)
     {
         t = Math.Clamp(t, 0, 1);
-        return new UiColor(
+        return new Color(
             (byte)MathF.Round(color.R + (other.R - color.R) * t),
             (byte)MathF.Round(color.G + (other.G - color.G) * t),
             (byte)MathF.Round(color.B + (other.B - color.B) * t),
             color.A);
     }
 
-    public static UiColor Lighten(this UiColor color, float amount)
+    public static Color Lighten(this Color color, float amount)
     {
-        return color.Mix(UiColor.Rgb(255, 255, 255), amount);
+        return color.Mix(Color.Rgb(255, 255, 255), amount);
     }
 
-    public static UiColor Darken(this UiColor color, float amount)
+    public static Color Darken(this Color color, float amount)
     {
-        return color.Mix(UiColor.Rgb(0, 0, 0), amount);
+        return color.Mix(Color.Rgb(0, 0, 0), amount);
     }
 
-    public static float Luminance(this UiColor color)
+    public static float Luminance(this Color color)
     {
         return (0.2126f * color.R + 0.7152f * color.G + 0.0722f * color.B) / 255f;
     }
 
-    public static UiColor ContrastText(this UiColor color)
+    public static Color ContrastText(this Color color)
     {
-        return color.Luminance() > 0.55f ? UiColor.Rgb(28, 30, 36) : UiColor.Rgb(245, 245, 250);
+        return color.Luminance() > 0.55f ? Color.Rgb(28, 30, 36) : Color.Rgb(245, 245, 250);
     }
 }

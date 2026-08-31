@@ -6,15 +6,15 @@ public class Button : StackPanel
 {
     private Label? _label;
     private int _fontSize = 14;
-    private ushort _fontId = UiFonts.DefaultFontId;
+    private ushort _fontId = Fonts.DefaultFontId;
 
-    public Button() : base(UiOrientation.Horizontal)
+    public Button() : base(Orientation.Horizontal)
     {
         Height = 32;
-        Padding = new UiThickness(14, 0);
+        Padding = new Thickness(14, 0);
         Gap = 8;
-        AlignX = UiAlign.Center;
-        AlignY = UiAlign.Center;
+        AlignX = Align.Center;
+        AlignY = Align.Center;
         CornerRadius = 6;
         Focusable = true;
     }
@@ -72,20 +72,15 @@ public class Button : StackPanel
 
     public Label? TextLabel => _label;
 
-    public UiColor? TextColor { get; set; }
-    public UiColor? NormalBackground { get; init; }
-    public UiColor? HoverBackground { get; init; }
-    public UiColor? PressedBackground { get; init; }
-    public UiColor? DisabledBackground { get; set; }
     public bool AnimateHover { get; set; } = true;
 
-    public UiStyle Style { get; set; } = new()
+    public Style Style { get; set; } = new()
     {
-        Normal = new UiStyleState { Background = UiColor.Rgb(58, 66, 86), Text = UiColor.Rgb(235, 235, 240) },
-        Hover = new UiStyleState { Background = UiColor.Rgb(74, 84, 108) },
-        Pressed = new UiStyleState { Background = UiColor.Rgb(46, 52, 70) },
-        Disabled = new UiStyleState { Background = UiColor.Rgb(46, 50, 62), Text = UiColor.Rgb(160, 165, 180) },
-        Focused = new UiStyleState { Border = UiColor.Rgb(88, 130, 240), BorderWidth = 1 }
+        Normal = new StyleState { Background = Color.Rgb(58, 66, 86), Text = Color.Rgb(235, 235, 240) },
+        Hover = new StyleState { Background = Color.Rgb(74, 84, 108) },
+        Pressed = new StyleState { Background = Color.Rgb(46, 52, 70) },
+        Disabled = new StyleState { Background = Color.Rgb(46, 50, 62), Text = Color.Rgb(160, 165, 180) },
+        Focused = new StyleState { Border = Color.Rgb(88, 130, 240), BorderWidth = 1 }
     };
 
     protected override bool TracksPointer => true;
@@ -96,30 +91,14 @@ public class Button : StackPanel
     {
         base.ApplyDeclaration(ref decl);
         var state = Style.Resolve(this);
-
-        var background = !IsEnabled ? DisabledBackground : IsPressed ? PressedBackground : IsHovered ? HoverBackground : NormalBackground;
-        if ((background ?? state.Background) is { } backgroundColor)
-        {
-            decl.BackgroundColor = backgroundColor.ToClay();
-        }
-
-        if (state.CornerRadius is { } radius)
-        {
-            decl.BorderRadius = ClayBorderRadius.CreateUniform(radius);
-        }
-
-        if (BorderColor == null && state.Border is { } borderColor)
-        {
-            decl.Border.Color = borderColor.ToClay();
-            decl.Border.Width = ClayBorderWidth.CreateUniform(state.BorderWidth ?? 1);
-        }
+        state.Apply(this, ref decl);
 
         if (AnimateHover && Transition == null)
         {
-            decl.Transition = UiStyle.HoverTransition;
+            decl.Transition = Style.HoverTransition;
         }
 
-        if (_label != null && (TextColor ?? state.Text) is { } text)
+        if (_label != null && state.Text is { } text)
         {
             _label.Color = text;
         }
