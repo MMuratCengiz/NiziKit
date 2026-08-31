@@ -12,7 +12,7 @@ public sealed class MenuItem : Widget
         _menu = menu;
         Text = text;
         Width = UiSize.Grow;
-        Height = UiTheme.ControlHeight - 6;
+        Height = menu.ItemHeight;
         Padding = new UiThickness(8, 0);
         CornerRadius = 4;
     }
@@ -81,14 +81,17 @@ public sealed class MenuItem : Widget
         decl.Layout.ChildGap = 16;
         decl.Layout.ChildAlignment.Y = ClayAlignmentY.Center;
         var highlighted = IsEnabled && (IsHovered || Submenu is { IsOpen: true });
-        decl.BackgroundColor = (highlighted ? UiTheme.AccentHover : UiTheme.TableRow).ToClay();
+        if (highlighted)
+        {
+            decl.BackgroundColor = _menu.HighlightBackground.ToClay();
+        }
     }
 
     protected override void BuildContent()
     {
-        var textColor = (IsEnabled ? UiTheme.Text : UiTheme.TextMuted).ToClay();
-        var mutedColor = (IsEnabled ? UiTheme.TextMuted : UiTheme.Placeholder).ToClay();
-        var fontSize = (ushort)(_menu.FontSize > 0 ? _menu.FontSize : UiTheme.FontSize);
+        var textColor = (IsEnabled ? _menu.TextColor : _menu.DisabledTextColor).ToClay();
+        var mutedColor = (IsEnabled ? _menu.ShortcutColor : _menu.DisabledTextColor).ToClay();
+        var fontSize = (ushort)_menu.FontSize;
 
         if (_menu.HasCheckItems)
         {
@@ -98,8 +101,8 @@ public sealed class MenuItem : Widget
             box.BorderRadius = ClayBorderRadius.CreateUniform(3);
             if (IsCheckable)
             {
-                box.BackgroundColor = (Checked ? UiTheme.Accent : UiTheme.InputBackground).ToClay();
-                box.Border.Color = (Checked ? UiTheme.Accent : UiTheme.InputBorder).ToClay();
+                box.BackgroundColor = (Checked ? _menu.CheckColor : _menu.CheckBoxBackground).ToClay();
+                box.Border.Color = (Checked ? _menu.CheckColor : _menu.CheckBoxBorder).ToClay();
                 box.Border.Width = ClayBorderWidth.CreateUniform(1);
             }
 
@@ -109,7 +112,7 @@ public sealed class MenuItem : Widget
 
         var desc = ClayTextDesc.Default();
         desc.TextColor = textColor;
-        desc.FontId = UiTheme.FontId;
+        desc.FontId = _menu.FontId;
         desc.FontSize = fontSize;
         desc.WrapMode = ClayTextWrapMode.None;
         Ui.Clay.Text(Text, in desc);
@@ -128,7 +131,7 @@ public sealed class MenuItem : Widget
         if (Submenu != null)
         {
             desc.TextColor = mutedColor;
-            desc.FontId = desc.FontId == 0 ? FontAwesome.FontId : desc.FontId;
+            desc.FontId = FontAwesome.FontId;
             Ui.Clay.Text(FontAwesome.CaretRight, in desc);
         }
     }
@@ -143,7 +146,16 @@ public class Menu : Popup
         Width = UiSize.Fit.WithMin(160);
     }
 
-    public int FontSize { get; set; }
+    public int FontSize { get; set; } = 14;
+    public ushort FontId { get; set; } = UiFonts.DefaultFontId;
+    public float ItemHeight { get; set; } = 26;
+    public UiColor TextColor { get; set; } = UiColor.Rgb(235, 235, 240);
+    public UiColor DisabledTextColor { get; set; } = UiColor.Rgb(160, 165, 180);
+    public UiColor ShortcutColor { get; set; } = UiColor.Rgb(160, 165, 180);
+    public UiColor HighlightBackground { get; set; } = UiColor.Rgb(110, 150, 250);
+    public UiColor CheckColor { get; set; } = UiColor.Rgb(88, 130, 240);
+    public UiColor CheckBoxBackground { get; set; } = UiColor.Rgb(28, 30, 38);
+    public UiColor CheckBoxBorder { get; set; } = UiColor.Rgb(70, 76, 94);
     public bool HasCheckItems { get; private set; }
 
     public MenuItem AddItem(string text, Action onClick, string? shortcut = null, bool enabled = true)

@@ -12,10 +12,12 @@ public class Dropdown : HStack
     public Dropdown()
     {
         Width = 180;
-        Height = UiTheme.ControlHeight;
+        Height = 32;
         Padding = new UiThickness(10, 0);
         Gap = 8;
-        CornerRadius = UiTheme.CornerRadius;
+        CornerRadius = 6;
+        Background = UiColor.Rgb(28, 30, 38);
+        BorderColor = UiColor.Rgb(70, 76, 94);
         Focusable = true;
         _label = new Label { Wrap = false };
         _caret = new Label(FontAwesome.CaretDown) { Wrap = false, FontId = FontAwesome.FontId };
@@ -32,10 +34,22 @@ public class Dropdown : HStack
 
     public List<string> Items { get; } = new();
     public string Placeholder { get; set; } = "Select...";
-    public int FontSize { get; set; }
+    public int FontSize { get; set; } = 14;
+    public ushort FontId { get; set; } = UiFonts.DefaultFontId;
     public float MaxListHeight { get; set; } = 240;
-    public UiColor? TextColor { get; set; }
-    public UiColor? PlaceholderColor { get; set; }
+    public float RowHeight { get; set; } = 28;
+    public UiColor TextColor { get; set; } = UiColor.Rgb(235, 235, 240);
+    public UiColor DisabledTextColor { get; set; } = UiColor.Rgb(160, 165, 180);
+    public UiColor PlaceholderColor { get; set; } = UiColor.Rgb(120, 125, 140);
+    public UiColor CaretColor { get; set; } = UiColor.Rgb(160, 165, 180);
+    public UiColor HoverBackground { get; set; } = UiColor.Rgb(44, 48, 60);
+    public UiColor PressedBackground { get; set; } = UiColor.Rgb(46, 52, 70);
+    public UiColor DisabledBackground { get; set; } = UiColor.Rgb(46, 50, 62);
+    public UiColor FocusBorderColor { get; set; } = UiColor.Rgb(88, 130, 240);
+    public UiColor RowHoverBackground { get; set; } = UiColor.Rgb(110, 150, 250);
+    public UiColor RowSelectedBackground { get; set; } = UiColor.Rgba(88, 130, 240, 90);
+
+    public Popup Popup => _popup;
 
     public int SelectedIndex
     {
@@ -80,7 +94,7 @@ public class Dropdown : HStack
         var width = Ui.Clay.PixelsToPoints(Bounds.Width);
         _popup.Width = width > 0 ? UiSize.Fixed(width) : UiSize.Fit;
         _popup.Height = UiSize.Fit.WithMax(MaxListHeight);
-        _popup.ScrollVertical = Items.Count * (UiTheme.ControlHeight - 4 + 2) > MaxListHeight;
+        _popup.ScrollVertical = Items.Count * (RowHeight + _popup.Gap) > MaxListHeight;
         _popup.ClipChildren = _popup.ScrollVertical;
         _popup.Open(this);
     }
@@ -160,15 +174,23 @@ public class Dropdown : HStack
         var selected = SelectedItem;
         _label.Text = selected ?? Placeholder;
         _label.FontSize = FontSize;
-        _label.Color = !IsEnabled ? UiTheme.TextMuted : selected != null ? TextColor ?? UiTheme.Text : PlaceholderColor ?? UiTheme.Placeholder;
+        _label.FontId = FontId;
+        _label.Color = !IsEnabled ? DisabledTextColor : selected != null ? TextColor : PlaceholderColor;
         _caret.FontSize = FontSize;
-        _caret.Color = IsEnabled ? UiTheme.TextMuted : UiTheme.Placeholder;
+        _caret.Color = IsEnabled ? CaretColor : DisabledTextColor;
 
-        var color = !IsEnabled ? UiTheme.ButtonDisabled : IsPressed ? UiTheme.ButtonPressed : IsHovered || IsOpen ? UiTheme.SurfaceRaised : Background ?? UiTheme.InputBackground;
-        decl.BackgroundColor = color.ToClay();
-        var border = IsFocused || IsOpen ? UiTheme.InputFocusBorder : BorderColor ?? UiTheme.InputBorder;
-        decl.Border.Color = border.ToClay();
-        decl.Border.Width = ClayBorderWidth.CreateUniform(BorderWidth);
+        UiColor? color = !IsEnabled ? DisabledBackground : IsPressed ? PressedBackground : IsHovered || IsOpen ? HoverBackground : Background;
+        if (color is { } background)
+        {
+            decl.BackgroundColor = background.ToClay();
+        }
+
+        UiColor? border = IsFocused || IsOpen ? FocusBorderColor : BorderColor;
+        if (border is { } borderColor)
+        {
+            decl.Border.Color = borderColor.ToClay();
+            decl.Border.Width = ClayBorderWidth.CreateUniform(BorderWidth);
+        }
     }
 
     private sealed class DropdownRow : Widget
@@ -187,7 +209,7 @@ public class Dropdown : HStack
                 _content.Parent = this;
             }
             Width = UiSize.Grow;
-            Height = UiTheme.ControlHeight - 4;
+            Height = owner.RowHeight;
             Padding = new UiThickness(8, 0);
             CornerRadius = 4;
         }
@@ -206,8 +228,11 @@ public class Dropdown : HStack
         {
             base.ApplyDeclaration(ref decl);
             decl.Layout.ChildAlignment.Y = ClayAlignmentY.Center;
-            var color = IsHovered ? UiTheme.AccentHover : _index == _owner._selectedIndex ? UiTheme.TableRowSelected : UiTheme.TableRow;
-            decl.BackgroundColor = color.ToClay();
+            UiColor? color = IsHovered ? _owner.RowHoverBackground : _index == _owner._selectedIndex ? _owner.RowSelectedBackground : null;
+            if (color is { } background)
+            {
+                decl.BackgroundColor = background.ToClay();
+            }
         }
 
         protected override void CollectChildren(List<Widget> frame)
@@ -229,9 +254,9 @@ public class Dropdown : HStack
             }
 
             var desc = ClayTextDesc.Default();
-            desc.TextColor = UiTheme.Text.ToClay();
-            desc.FontId = UiTheme.FontId;
-            desc.FontSize = (ushort)(_owner.FontSize > 0 ? _owner.FontSize : UiTheme.FontSize);
+            desc.TextColor = _owner.TextColor.ToClay();
+            desc.FontId = _owner.FontId;
+            desc.FontSize = (ushort)_owner.FontSize;
             desc.WrapMode = ClayTextWrapMode.None;
             Ui.Clay.Text(_owner.Items[_index], in desc);
         }

@@ -134,17 +134,12 @@ public static class UiText
         return Slot(text).Measure(text, fontId, fontSize);
     }
 
-    public static Vector2 Measure(string text)
-    {
-        return Measure(text, UiTheme.FontId, (ushort)UiTheme.FontSize);
-    }
-
-    public static ClayTextDesc Desc(UiColor color, int fontSize = 0, ushort? fontId = null, bool wrap = true, UiAlign align = UiAlign.Start)
+    public static ClayTextDesc Desc(UiColor color, int fontSize = 14, ushort fontId = UiFonts.DefaultFontId, bool wrap = true, UiAlign align = UiAlign.Start)
     {
         var desc = ClayTextDesc.Default();
         desc.TextColor = color.ToClay();
-        desc.FontId = fontId ?? UiTheme.FontId;
-        desc.FontSize = (ushort)(fontSize > 0 ? fontSize : UiTheme.FontSize);
+        desc.FontId = fontId;
+        desc.FontSize = (ushort)fontSize;
         desc.WrapMode = wrap ? ClayTextWrapMode.Words : ClayTextWrapMode.None;
         desc.TextAlignment = align.ToClayText();
         return desc;

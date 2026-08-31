@@ -17,7 +17,7 @@ internal static class OverlayMotion
 
     internal static void Fade(Widget widget)
     {
-        widget.FadeIn(UiTheme.Background);
+        widget.FadeIn(widget.Background ?? Transparent);
     }
 
     internal static void FadeBackground(Widget widget)
@@ -35,9 +35,9 @@ public class Popup : StackPanel
 
     public Popup() : base(UiOrientation.Vertical)
     {
-        Background = UiTheme.SurfaceRaised;
-        BorderColor = UiTheme.Border;
-        CornerRadius = UiTheme.CornerRadius;
+        Background = UiColor.Rgb(44, 48, 60);
+        BorderColor = UiColor.Rgb(70, 76, 94);
+        CornerRadius = 6;
         Padding = 6;
         OverlayMotion.Slide(this);
     }

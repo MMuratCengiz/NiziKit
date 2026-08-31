@@ -43,7 +43,9 @@ public class TextArea : Widget
         Width = 300;
         Height = 120;
         Padding = new UiThickness(10, 8);
-        CornerRadius = UiTheme.CornerRadius;
+        CornerRadius = 6;
+        Background = UiColor.Rgb(28, 30, 38);
+        BorderColor = UiColor.Rgb(70, 76, 94);
         ClipChildren = true;
     }
 
@@ -70,12 +72,13 @@ public class TextArea : Widget
     public string Placeholder { get; set; } = "";
     public bool ReadOnly { get; set; }
     public int MaxLength { get; set; } = int.MaxValue;
-    public int FontSize { get; set; }
-    public ushort? FontId { get; set; }
-    public UiColor? TextColor { get; set; }
-    public UiColor? PlaceholderColor { get; set; }
-    public UiColor? FocusBorderColor { get; set; }
-    public UiColor? SelectionColor { get; set; }
+    public int FontSize { get; set; } = 14;
+    public ushort FontId { get; set; } = UiFonts.DefaultFontId;
+    public UiColor TextColor { get; set; } = UiColor.Rgb(235, 235, 240);
+    public UiColor DisabledTextColor { get; set; } = UiColor.Rgb(160, 165, 180);
+    public UiColor PlaceholderColor { get; set; } = UiColor.Rgb(120, 125, 140);
+    public UiColor FocusBorderColor { get; set; } = UiColor.Rgb(88, 130, 240);
+    public UiColor SelectionColor { get; set; } = UiColor.Rgba(88, 130, 240, 90);
     public float ScrollStep { get; set; } = 3;
 
     public int Cursor
@@ -103,8 +106,8 @@ public class TextArea : Widget
     public event Action<TextArea>? TextChanged;
     public event Action<TextArea>? Submitted;
 
-    private ushort ResolvedFontSize => (ushort)(FontSize > 0 ? FontSize : UiTheme.FontSize);
-    private ushort ResolvedFontId => FontId ?? UiTheme.FontId;
+    private ushort ResolvedFontSize => (ushort)FontSize;
+    private ushort ResolvedFontId => FontId;
 
     public void Clear()
     {
@@ -736,10 +739,13 @@ public class TextArea : Widget
         base.ApplyDeclaration(ref decl);
         UpdateMetrics();
         decl.Layout.LayoutDirection = ClayLayoutDirection.TopToBottom;
-        decl.BackgroundColor = (Background ?? UiTheme.InputBackground).ToClay();
-        var border = IsFocused ? FocusBorderColor ?? UiTheme.InputFocusBorder : BorderColor ?? UiTheme.InputBorder;
-        decl.Border.Color = border.ToClay();
-        decl.Border.Width = ClayBorderWidth.CreateUniform(BorderWidth);
+        UiColor? border = IsFocused ? FocusBorderColor : BorderColor;
+        if (border is { } borderColor)
+        {
+            decl.Border.Color = borderColor.ToClay();
+            decl.Border.Width = ClayBorderWidth.CreateUniform(BorderWidth);
+        }
+
         decl.Clip = ClayClipDesc.Create(true, true, new Vector2(0, -Ui.Clay.PixelsToPoints(_scroll)));
     }
 
@@ -758,7 +764,7 @@ public class TextArea : Widget
         {
             if (Placeholder.Length > 0)
             {
-                desc.TextColor = (PlaceholderColor ?? UiTheme.Placeholder).ToClay();
+                desc.TextColor = PlaceholderColor.ToClay();
                 desc.WrapMode = ClayTextWrapMode.Words;
                 _placeholder.Draw(Placeholder, in desc);
             }
@@ -767,7 +773,7 @@ public class TextArea : Widget
             return;
         }
 
-        desc.TextColor = (TextColor ?? (IsEnabled ? UiTheme.Text : UiTheme.TextMuted)).ToClay();
+        desc.TextColor = (IsEnabled ? TextColor : DisabledTextColor).ToClay();
 
         var view = ViewHeight();
         var first = 0;
@@ -794,7 +800,7 @@ public class TextArea : Widget
         var hasSelection = HasSelection;
         var selectionStart = SelectionStart;
         var selectionEnd = SelectionEnd;
-        var highlightColor = (SelectionColor ?? UiTheme.Accent.WithAlpha(90)).ToClay();
+        var highlightColor = SelectionColor.ToClay();
 
         for (var i = first; i <= last; i++)
         {
@@ -868,7 +874,7 @@ public class TextArea : Widget
         var cursor = ClayElementDeclaration.Default();
         cursor.Layout.Sizing.Width = ClaySizingAxis.Fixed(1.5f);
         cursor.Layout.Sizing.Height = ClaySizingAxis.Fixed(lineHeightPoints > 0 ? lineHeightPoints : ResolvedFontSize + 4);
-        cursor.BackgroundColor = (TextColor ?? UiTheme.Text).ToClay();
+        cursor.BackgroundColor = TextColor.ToClay();
         cursor.Floating.AttachTo = ClayFloatingAttachTo.Parent;
         cursor.Floating.ZIndex = Ui.FloatingZIndex;
         cursor.Floating.ElementAttachPoint = ClayFloatingAttachPoint.LeftTop;

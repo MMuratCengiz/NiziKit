@@ -36,11 +36,14 @@ public class Slider : Widget
     public UiColor? TrackColor { get; set; }
     public UiColor? FillColor { get; set; }
     public UiColor? KnobColor { get; set; }
-    public SliderStyle? Style { get; set; }
+    public SliderStyle Style { get; set; } = new();
     public bool ShowValue { get; init; }
     public string ValueFormat { get; init; } = "0.##";
     public float ValueWidth { get; set; } = 40;
-    public UiColor? ValueColor { get; set; }
+    public UiColor ValueColor { get; set; } = UiColor.Rgb(160, 165, 180);
+    public UiColor DisabledValueColor { get; set; } = UiColor.Rgb(120, 125, 140);
+    public int FontSize { get; set; } = 14;
+    public ushort FontId { get; set; } = UiFonts.DefaultFontId;
 
     public bool Vertical
     {
@@ -190,7 +193,7 @@ public class Slider : Widget
 
     protected override void BuildContent()
     {
-        var style = Style ?? UiTheme.SliderStyle;
+        var style = Style;
         var bounds = Ui.Clay.GetElementBoundingBox(_trackId);
         var trackLength = Ui.Clay.PixelsToPoints(_vertical ? bounds.Height : bounds.Width);
         var offset = KnobSize * 0.5f + Normalized * MathF.Max(0, trackLength - KnobSize);
@@ -213,7 +216,7 @@ public class Slider : Widget
             track.Layout.ChildAlignment.Y = ClayAlignmentY.Center;
         }
 
-        track.BackgroundColor = (TrackColor ?? style.Track ?? UiTheme.SurfaceRaised).ToClay();
+        track.BackgroundColor = (TrackColor ?? style.Track).ToClay();
         track.BorderRadius = ClayBorderRadius.CreateUniform(TrackHeight * 0.5f);
         Ui.Clay.OpenElement(in track);
         {
@@ -229,7 +232,7 @@ public class Slider : Widget
                 fill.Layout.Sizing.Height = ClaySizingAxis.Grow(0, float.MaxValue);
             }
 
-            var fillColor = IsEnabled ? style.Fill ?? UiTheme.Accent : style.FillDisabled ?? UiTheme.ButtonDisabled;
+            var fillColor = IsEnabled ? style.Fill : style.FillDisabled;
             fill.BackgroundColor = (FillColor ?? fillColor).ToClay();
             fill.BorderRadius = ClayBorderRadius.CreateUniform(TrackHeight * 0.5f);
             Ui.Clay.OpenElement(in fill);
@@ -238,12 +241,12 @@ public class Slider : Widget
             var knob = ClayElementDeclaration.Default();
             knob.Layout.Sizing.Width = ClaySizingAxis.Fixed(KnobSize);
             knob.Layout.Sizing.Height = ClaySizingAxis.Fixed(KnobSize);
-            var knobColor = active ? style.KnobHover ?? UiTheme.Text : style.Knob ?? UiTheme.TextMuted;
+            var knobColor = active ? style.KnobHover : style.Knob;
             knob.BackgroundColor = (KnobColor ?? knobColor).ToClay();
             knob.BorderRadius = ClayBorderRadius.CreateUniform(KnobSize * 0.5f);
             if (IsFocused)
             {
-                knob.Border.Color = (style.Focus ?? UiTheme.InputFocusBorder).ToClay();
+                knob.Border.Color = style.Focus.ToClay();
                 knob.Border.Width = ClayBorderWidth.CreateUniform(2);
             }
 
@@ -281,9 +284,9 @@ public class Slider : Widget
         Ui.Clay.OpenElement(in label);
         {
             var desc = ClayTextDesc.Default();
-            desc.TextColor = (ValueColor ?? (IsEnabled ? UiTheme.TextMuted : UiTheme.Placeholder)).ToClay();
-            desc.FontId = UiTheme.FontId;
-            desc.FontSize = (ushort)UiTheme.FontSize;
+            desc.TextColor = (IsEnabled ? ValueColor : DisabledValueColor).ToClay();
+            desc.FontId = FontId;
+            desc.FontSize = (ushort)FontSize;
             desc.WrapMode = ClayTextWrapMode.None;
             Ui.Clay.Text(ValueText, in desc);
         }

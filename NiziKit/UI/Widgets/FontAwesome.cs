@@ -215,6 +215,8 @@ public static class FontAwesome
     public const string DiagramProject = "\uf542";
     public const string PuzzlePiece = "\uf12e";
 
+    private static ushort _loadedFontId = FontId;
+
     public static bool IsInitialized { get; private set; }
 
     public static bool TryInitialize(ushort fontId = FontId)
@@ -239,7 +241,7 @@ public static class FontAwesome
         }
 
         UiFonts.LoadEmbedded(typeof(FontAwesome).Assembly, ResourceName, fontId);
-        UiTheme.Current.IconFontId = fontId;
+        _loadedFontId = fontId;
         IsInitialized = true;
     }
 
@@ -250,7 +252,7 @@ public static class FontAwesome
             return;
         }
 
-        UiFonts.Unload(FontId);
+        UiFonts.Unload(_loadedFontId);
         IsInitialized = false;
     }
 }

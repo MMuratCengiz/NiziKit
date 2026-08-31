@@ -15,9 +15,9 @@ public class Modal : VStack
         Width = UiSize.FitRange(320, 520);
         Padding = 16;
         Gap = 12;
-        Background = UiTheme.Surface;
-        BorderColor = UiTheme.Border;
-        CornerRadius = UiTheme.CornerRadius;
+        Background = UiColor.Rgb(34, 37, 46);
+        BorderColor = UiColor.Rgb(70, 76, 94);
+        CornerRadius = 6;
         _title = new Heading { Wrap = false, Visible = false };
         Children.Add(_title);
         _backdrop = new ModalBackdrop(this);

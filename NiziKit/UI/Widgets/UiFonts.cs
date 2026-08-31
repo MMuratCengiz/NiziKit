@@ -31,9 +31,7 @@ public static class UiFonts
     private static FontLibrary? _library;
     private static readonly Dictionary<ushort, FontEntry> Fonts = new();
 
-    public static ushort? Default { get; set; }
-    public static ushort? Bold { get; set; }
-    public static ushort? Mono { get; set; }
+    public const ushort DefaultFontId = 0;
 
     public static FontLibrary Library => _library ??= new FontLibrary();
 
@@ -233,20 +231,6 @@ public static class UiFonts
 
         Ui.Clay.RemoveFont(fontId);
         entry.Dispose();
-        if (Default == fontId)
-        {
-            Default = null;
-        }
-
-        if (Bold == fontId)
-        {
-            Bold = null;
-        }
-
-        if (Mono == fontId)
-        {
-            Mono = null;
-        }
     }
 
     public static void Shutdown()
@@ -257,9 +241,6 @@ public static class UiFonts
         }
 
         Fonts.Clear();
-        Default = null;
-        Bold = null;
-        Mono = null;
         _library?.Dispose();
         _library = null;
     }

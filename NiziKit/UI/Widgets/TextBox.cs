@@ -222,9 +222,11 @@ public class TextBox : Widget
     {
         Focusable = true;
         Width = 200;
-        Height = UiTheme.ControlHeight;
+        Height = 32;
         Padding = new UiThickness(10, 0);
-        CornerRadius = UiTheme.CornerRadius;
+        CornerRadius = 6;
+        Background = UiColor.Rgb(28, 30, 38);
+        BorderColor = UiColor.Rgb(70, 76, 94);
         ClipChildren = true;
     }
 
@@ -249,12 +251,13 @@ public class TextBox : Widget
 
     public string Placeholder { get; init; } = "";
     public int MaxLength { get; set; } = int.MaxValue;
-    public int FontSize { get; set; }
-    public ushort? FontId { get; set; }
-    public UiColor? TextColor { get; set; }
-    public UiColor? PlaceholderColor { get; set; }
-    public UiColor? FocusBorderColor { get; set; }
-    public UiColor? SelectionColor { get; set; }
+    public int FontSize { get; set; } = 14;
+    public ushort FontId { get; set; } = UiFonts.DefaultFontId;
+    public UiColor TextColor { get; set; } = UiColor.Rgb(235, 235, 240);
+    public UiColor DisabledTextColor { get; set; } = UiColor.Rgb(160, 165, 180);
+    public UiColor PlaceholderColor { get; set; } = UiColor.Rgb(120, 125, 140);
+    public UiColor FocusBorderColor { get; set; } = UiColor.Rgb(88, 130, 240);
+    public UiColor SelectionColor { get; set; } = UiColor.Rgba(88, 130, 240, 90);
     public bool IsPassword { get; init; }
     public char PasswordChar { get; set; } = '•';
     public bool ReadOnly { get; init; }
@@ -280,8 +283,8 @@ public class TextBox : Widget
     public event Action<TextBox>? TextChanged;
     public event Action<TextBox>? Submitted;
 
-    private ushort ResolvedFontSize => (ushort)(FontSize > 0 ? FontSize : UiTheme.FontSize);
-    private ushort ResolvedFontId => FontId ?? UiTheme.FontId;
+    private ushort ResolvedFontSize => (ushort)FontSize;
+    private ushort ResolvedFontId => FontId;
 
     public void Clear()
     {
@@ -691,10 +694,13 @@ public class TextBox : Widget
         base.ApplyDeclaration(ref decl);
         UpdateMetrics();
         decl.Layout.ChildAlignment.Y = ClayAlignmentY.Center;
-        decl.BackgroundColor = (Background ?? UiTheme.InputBackground).ToClay();
-        var border = IsFocused ? FocusBorderColor ?? UiTheme.InputFocusBorder : BorderColor ?? UiTheme.InputBorder;
-        decl.Border.Color = border.ToClay();
-        decl.Border.Width = ClayBorderWidth.CreateUniform(BorderWidth);
+        UiColor? border = IsFocused ? FocusBorderColor : BorderColor;
+        if (border is { } borderColor)
+        {
+            decl.Border.Color = borderColor.ToClay();
+            decl.Border.Width = ClayBorderWidth.CreateUniform(BorderWidth);
+        }
+
         decl.Clip = ClayClipDesc.Create(true, false, new Vector2(-Ui.Clay.PixelsToPoints(_scroll), 0));
     }
 
@@ -711,7 +717,7 @@ public class TextBox : Widget
         var length = _display.Length;
         if (length > 0)
         {
-            desc.TextColor = (TextColor ?? (IsEnabled ? UiTheme.Text : UiTheme.TextMuted)).ToClay();
+            desc.TextColor = (IsEnabled ? TextColor : DisabledTextColor).ToClay();
             if (HasSelection)
             {
                 var start = SelectionStart;
@@ -722,7 +728,7 @@ public class TextBox : Widget
                 }
 
                 var highlight = ClayElementDeclaration.Default();
-                highlight.BackgroundColor = (SelectionColor ?? UiTheme.Accent.WithAlpha(90)).ToClay();
+                highlight.BackgroundColor = SelectionColor.ToClay();
                 highlight.BorderRadius = ClayBorderRadius.CreateUniform(2);
                 highlight.Layout.Sizing.Width = ClaySizingAxis.Fit(0, float.MaxValue);
                 highlight.Layout.Sizing.Height = ClaySizingAxis.Fit(0, float.MaxValue);
@@ -743,7 +749,7 @@ public class TextBox : Widget
         }
         else if (Placeholder.Length > 0)
         {
-            desc.TextColor = (PlaceholderColor ?? UiTheme.Placeholder).ToClay();
+            desc.TextColor = PlaceholderColor.ToClay();
             _placeholder.Draw(Placeholder, in desc);
         }
 
@@ -755,7 +761,7 @@ public class TextBox : Widget
         var cursor = ClayElementDeclaration.Default();
         cursor.Layout.Sizing.Width = ClaySizingAxis.Fixed(1.5f);
         cursor.Layout.Sizing.Height = ClaySizingAxis.Fixed(fontSize + 4);
-        cursor.BackgroundColor = (TextColor ?? UiTheme.Text).ToClay();
+        cursor.BackgroundColor = TextColor.ToClay();
         cursor.Floating.AttachTo = ClayFloatingAttachTo.Parent;
         cursor.Floating.ZIndex = Ui.FloatingZIndex;
         cursor.Floating.ElementAttachPoint = ClayFloatingAttachPoint.LeftCenter;

@@ -54,6 +54,7 @@ public static partial class Ui
     public static float DragThreshold { get; set; } = 4;
     public static float FloatingZIndex { get; internal set; }
     public static int WarmupFrames { get; set; } = 2;
+    public static UiColor WarmupColor { get; set; } = UiColor.Rgb(24, 26, 32);
     public static int FrameCount => _frameCount;
     internal static UiColor? WarmupOverlay { get; private set; }
     private static int _frameCount;
@@ -199,7 +200,7 @@ public static partial class Ui
         _dropCandidate = null;
         HoveredWidget = null;
         FloatingZIndex = 0;
-        WarmupOverlay = _frameCount < WarmupFrames ? UiTheme.Background : null;
+        WarmupOverlay = _frameCount < WarmupFrames ? WarmupColor : null;
         _frameCount++;
 
         for (var i = 0; i < FrameWidgets.Count; i++)

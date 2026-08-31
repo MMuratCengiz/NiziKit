@@ -108,45 +108,16 @@ public sealed class UiStyle
 
         return result;
     }
-
-    public static UiStyle Button(UiColor baseColor, UiColor? textColor = null)
-    {
-        return Button(baseColor, baseColor.Lighten(0.12f), baseColor.Darken(0.15f), textColor);
-    }
-
-    public static UiStyle Button(UiColor normal, UiColor hover, UiColor pressed, UiColor? textColor = null)
-    {
-        return new UiStyle
-        {
-            Normal = new UiStyleState { Background = normal, Text = textColor ?? normal.ContrastText() },
-            Hover = new UiStyleState { Background = hover },
-            Pressed = new UiStyleState { Background = pressed },
-            Disabled = new UiStyleState { Background = UiTheme.ButtonDisabled, Text = UiTheme.TextMuted },
-            Focused = new UiStyleState { Border = UiTheme.InputFocusBorder, BorderWidth = 1 }
-        };
-    }
-
-    public static UiStyle Checkable(UiColor background, UiColor border, UiColor accent, UiColor mark)
-    {
-        return new UiStyle
-        {
-            Normal = new UiStyleState { Background = background, Border = border, BorderWidth = 1, Text = mark },
-            Hover = new UiStyleState { Border = accent.Lighten(0.15f) },
-            Checked = new UiStyleState { Background = accent, Border = accent },
-            Disabled = new UiStyleState { Background = UiTheme.ButtonDisabled, Border = UiTheme.ButtonDisabled, Text = UiTheme.TextMuted },
-            Focused = new UiStyleState { Border = UiTheme.InputFocusBorder, BorderWidth = 2 }
-        };
-    }
 }
 
 public sealed class SliderStyle
 {
-    public UiColor? Track;
-    public UiColor? Fill;
-    public UiColor? FillDisabled;
-    public UiColor? Knob;
-    public UiColor? KnobHover;
-    public UiColor? Focus;
+    public UiColor Track = UiColor.Rgb(44, 48, 60);
+    public UiColor Fill = UiColor.Rgb(88, 130, 240);
+    public UiColor FillDisabled = UiColor.Rgb(46, 50, 62);
+    public UiColor Knob = UiColor.Rgb(160, 165, 180);
+    public UiColor KnobHover = UiColor.Rgb(235, 235, 240);
+    public UiColor Focus = UiColor.Rgb(88, 130, 240);
 }
 
 public static class UiColorExtensions

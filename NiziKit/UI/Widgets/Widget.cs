@@ -39,7 +39,6 @@ public abstract class Widget
     public UiThickness Padding { get; set; }
     public UiThickness Margin { get; set; }
     public UiColor? Background { get; set; }
-    public Texture? BackgroundTexture { get; set; }
     public float CornerRadius { get; init; }
     public UiColor? BorderColor { get; set; }
     public float BorderWidth { get; set; } = 1;
@@ -152,7 +151,7 @@ public abstract class Widget
 
     public void BeginExit(float duration, Action? completed)
     {
-        BeginExit(duration, Vector2.Zero, UiTheme.Background, completed);
+        BeginExit(duration, Vector2.Zero, Background, completed);
     }
 
     public void CancelExit()
@@ -522,11 +521,6 @@ public abstract class Widget
         if (Background is { } background)
         {
             decl.BackgroundColor = background.ToClay();
-        }
-
-        if (BackgroundTexture != null)
-        {
-            decl.Custom.CustomData = (IntPtr)(ulong)BackgroundTexture;
         }
 
         if (Overlay is { } overlay)

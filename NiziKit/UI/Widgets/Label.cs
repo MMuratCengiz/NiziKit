@@ -23,19 +23,16 @@ public class Label : Widget
 
     public string Text { get; set; } = "";
     public Func<string>? TextBinding { get; set; }
-    public int FontSize { get; set; }
-    public ushort? FontId { get; set; }
-    public UiColor? Color { get; set; }
+    public int FontSize { get; set; } = 14;
+    public ushort FontId { get; set; } = UiFonts.DefaultFontId;
+    public UiColor Color { get; set; } = UiColor.Rgb(235, 235, 240);
     public bool Wrap { get; init; } = true;
     public UiAlign TextAlign { get; init; } = UiAlign.Start;
     public UiAlign VerticalAlign { get; init; } = UiAlign.Start;
 
-    public ushort ResolvedFontSize => (ushort)(FontSize > 0 ? FontSize : UiTheme.FontSize);
-    public ushort ResolvedFontId => FontId ?? UiTheme.FontId;
-
     public Vector2 Measure()
     {
-        return _cache.Measure(Text, ResolvedFontId, ResolvedFontSize);
+        return _cache.Measure(Text, FontId, (ushort)FontSize);
     }
 
     protected override void ApplyDeclaration(ref ClayElementDeclaration decl)
@@ -63,9 +60,9 @@ public class Label : Widget
         }
 
         var desc = ClayTextDesc.Default();
-        desc.TextColor = (Color ?? UiTheme.Text).ToClay();
-        desc.FontId = ResolvedFontId;
-        desc.FontSize = ResolvedFontSize;
+        desc.TextColor = Color.ToClay();
+        desc.FontId = FontId;
+        desc.FontSize = (ushort)FontSize;
         desc.WrapMode = Wrap ? ClayTextWrapMode.Words : ClayTextWrapMode.None;
         desc.TextAlignment = TextAlign.ToClayText();
         Ui.Clay.Text(view, in desc);
@@ -76,11 +73,11 @@ public class Heading : Label
 {
     public Heading()
     {
-        FontSize = UiTheme.HeadingFontSize;
+        FontSize = 20;
     }
 
     public Heading(string text) : base(text)
     {
-        FontSize = UiTheme.HeadingFontSize;
+        FontSize = 20;
     }
 }

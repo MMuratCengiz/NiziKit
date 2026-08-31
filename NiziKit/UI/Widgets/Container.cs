@@ -53,7 +53,8 @@ public abstract class Container : Widget, IEnumerable<Widget>
     public bool ScrollHorizontal { get; set; }
     public bool ShowScrollbar { get; set; } = true;
     public float ScrollbarWidth { get; set; } = 6;
-    public UiColor? ScrollbarColor { get; set; }
+    public UiColor ScrollbarColor { get; set; } = UiColor.Rgb(70, 76, 94);
+    public UiColor ScrollbarActiveColor { get; set; } = UiColor.Rgb(160, 165, 180);
 
     private ScrollThumb? _thumb;
 
@@ -231,7 +232,7 @@ internal sealed class ScrollThumb : Widget
         Width = _owner.ScrollbarWidth;
         Height = thumbPoints;
         _floating.Offset = new Vector2(-margin, margin + travel * t);
-        Background = _owner.ScrollbarColor ?? (IsDragging || IsHovered ? UiTheme.TextMuted : UiTheme.Border);
+        Background = IsDragging || IsHovered ? _owner.ScrollbarActiveColor : _owner.ScrollbarColor;
         base.ApplyDeclaration(ref decl);
     }
 }
@@ -290,6 +291,6 @@ public class Divider : Widget
     {
         Width = UiSize.Grow;
         Height = 1;
-        Background = UiTheme.Border;
+        Background = UiColor.Rgb(70, 76, 94);
     }
 }

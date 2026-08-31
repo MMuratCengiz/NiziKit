@@ -11,7 +11,7 @@ public class Checkbox : HStack
     public Checkbox()
     {
         Gap = 8;
-        Height = UiTheme.ControlHeight;
+        Height = 32;
         Focusable = true;
         _box = new CheckBoxMark(this);
         _label = new Label { Wrap = false };
@@ -51,8 +51,30 @@ public class Checkbox : HStack
     }
 
     public float BoxSize { get; set; } = 18;
-    public UiColor? TextColor { get; set; }
-    public UiStyle? Style { get; set; }
+    public UiColor TextColor { get; set; } = UiColor.Rgb(235, 235, 240);
+    public UiColor DisabledTextColor { get; set; } = UiColor.Rgb(160, 165, 180);
+
+    public int FontSize
+    {
+        get => _label.FontSize;
+        set => _label.FontSize = value;
+    }
+
+    public ushort FontId
+    {
+        get => _label.FontId;
+        set => _label.FontId = value;
+    }
+
+    public UiStyle Style { get; set; } = new()
+    {
+        Normal = new UiStyleState { Background = UiColor.Rgb(28, 30, 38), Border = UiColor.Rgb(70, 76, 94), BorderWidth = 1, Text = UiColor.Rgb(235, 235, 240) },
+        Hover = new UiStyleState { Border = UiColor.Rgb(113, 149, 242) },
+        Checked = new UiStyleState { Background = UiColor.Rgb(88, 130, 240), Border = UiColor.Rgb(88, 130, 240) },
+        Disabled = new UiStyleState { Background = UiColor.Rgb(46, 50, 62), Border = UiColor.Rgb(46, 50, 62), Text = UiColor.Rgb(160, 165, 180) },
+        Focused = new UiStyleState { Border = UiColor.Rgb(88, 130, 240), BorderWidth = 2 }
+    };
+
     public bool AnimateHover { get; set; } = true;
 
     public event Action<Checkbox>? Changed;
@@ -72,7 +94,7 @@ public class Checkbox : HStack
     protected override void ApplyDeclaration(ref ClayElementDeclaration decl)
     {
         base.ApplyDeclaration(ref decl);
-        _label.Color = TextColor ?? (IsEnabled ? UiTheme.Text : UiTheme.TextMuted);
+        _label.Color = IsEnabled ? TextColor : DisabledTextColor;
     }
 
     private sealed class CheckBoxMark : Widget
@@ -92,10 +114,18 @@ public class Checkbox : HStack
             Height = _owner.BoxSize;
             base.ApplyDeclaration(ref decl);
 
-            var state = (_owner.Style ?? UiTheme.CheckboxStyle).Resolve(_owner, _owner.Checked);
-            decl.BackgroundColor = (state.Background ?? UiTheme.InputBackground).ToClay();
-            decl.Border.Color = (state.Border ?? UiTheme.InputBorder).ToClay();
-            decl.Border.Width = ClayBorderWidth.CreateUniform(state.BorderWidth ?? 1);
+            var state = _owner.Style.Resolve(_owner, _owner.Checked);
+            if (state.Background is { } background)
+            {
+                decl.BackgroundColor = background.ToClay();
+            }
+
+            if (state.Border is { } border)
+            {
+                decl.Border.Color = border.ToClay();
+                decl.Border.Width = ClayBorderWidth.CreateUniform(state.BorderWidth ?? 1);
+            }
+
             if (state.CornerRadius is { } radius)
             {
                 decl.BorderRadius = ClayBorderRadius.CreateUniform(radius);
@@ -108,7 +138,7 @@ public class Checkbox : HStack
 
             decl.Layout.ChildAlignment.X = ClayAlignmentX.Center;
             decl.Layout.ChildAlignment.Y = ClayAlignmentY.Center;
-            _markColor = state.Text ?? UiTheme.Text;
+            _markColor = state.Text ?? _owner.TextColor;
         }
 
         protected override void BuildContent()

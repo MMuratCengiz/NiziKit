@@ -24,8 +24,8 @@ public class Window : VStack
     {
         Width = _size.X;
         Height = _size.Y;
-        Background = UiTheme.Surface;
-        BorderColor = UiTheme.Border;
+        Background = UiColor.Rgb(34, 37, 46);
+        BorderColor = UiColor.Rgb(70, 76, 94);
         CornerRadius = 8;
         ClipChildren = true;
         Floating = _floating;
@@ -185,7 +185,7 @@ public class Window : VStack
             _collapsed = value;
             Content.Visible = !value;
             Height = value ? UiSize.Fit : _size.Y;
-            _collapseButton.Icon = value ? FontAwesome.Plus : FontAwesome.Minus;
+            _collapseButton.Text = value ? FontAwesome.Plus : FontAwesome.Minus;
             UpdateGrip();
         }
     }
@@ -284,8 +284,15 @@ public class Window : VStack
         {
             decl.Transition.Properties &= ~(uint)ClayTransitionPropertyFlagBits.BoundingBox;
         }
-        _title.Color = IsActive ? UiTheme.Text : UiTheme.TextMuted;
+        _title.Color = IsActive ? TitleColor : InactiveTitleColor;
     }
+
+    public UiColor TitleColor { get; set; } = UiColor.Rgb(235, 235, 240);
+    public UiColor InactiveTitleColor { get; set; } = UiColor.Rgb(160, 165, 180);
+
+    public Label TitleLabel => _title;
+
+    public HStack TitleBar => _titleBar;
 
     private static readonly List<Window> OpenWindows = new();
 
@@ -397,7 +404,7 @@ public class Window : VStack
             Height = 30;
             Padding = new UiThickness(10, 4, 0, 0);
             Gap = 2;
-            Background = UiTheme.SurfaceRaised;
+            Background = UiColor.Rgb(44, 48, 60);
             Draggable = true;
             Pressed += (_, _) => owner.BringToFront();
             DragStarted += OnDragStarted;
@@ -429,18 +436,20 @@ public class Window : VStack
     {
         public WindowButton(string glyph, bool danger)
         {
-            Icon = glyph;
+            Text = glyph;
             Width = 26;
             Height = 22;
             Padding = new UiThickness(0, 0);
             CornerRadius = 4;
             Focusable = false;
             FontSize = 20;
+            FontId = FontAwesome.FontId;
             NormalBackground = UiColor.Rgba(0, 0, 0, 0);
             if (danger)
             {
-                HoverBackground = UiTheme.Danger;
-                PressedBackground = UiTheme.Danger.Darken(0.2f);
+                var dangerColor = UiColor.Rgb(220, 72, 72);
+                HoverBackground = dangerColor;
+                PressedBackground = dangerColor.Darken(0.2f);
             }
         }
     }

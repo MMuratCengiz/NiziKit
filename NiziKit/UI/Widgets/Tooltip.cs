@@ -12,7 +12,11 @@ public static class Tooltip
     public static float Delay { get; set; } = 0.6f;
     public static Func<VStack>? FrameFactory { get; set; }
     public static Vector2 PointerOffset { get; set; } = new(12, 16);
-    public static int FontSize { get; set; }
+    public static int FontSize { get; set; } = 14;
+    public static ushort FontId { get; set; } = UiFonts.DefaultFontId;
+    public static UiColor TextColor { get; set; } = UiColor.Rgb(235, 235, 240);
+    public static UiColor Background { get; set; } = UiColor.Rgb(44, 48, 60);
+    public static UiColor BorderColor { get; set; } = UiColor.Rgb(70, 76, 94);
     public static bool IsEnabled => _layer != null;
     public static bool IsShowing => _layer is { IsShowing: true };
 
@@ -76,14 +80,14 @@ public sealed class TooltipLayer : Container
     {
         var frame = TooltipSettings.FrameFactory?.Invoke() ?? new VStack
         {
-            Background = UiTheme.SurfaceRaised,
-            BorderColor = UiTheme.Border,
+            Background = TooltipSettings.Background,
+            BorderColor = TooltipSettings.BorderColor,
             CornerRadius = 4,
             Padding = new UiThickness(8, 5)
         };
         frame.Floating = _placement;
         frame.Animate(0.15f, ClayTransitionPropertyFlagBits.OverlayColor);
-        frame.EnterFrom(ClayTransitionStateDesc.FromOverlay(UiTheme.Background.ToClay()), ClayTransitionEnterTrigger.OnFirstParentFrame);
+        frame.EnterFrom(ClayTransitionStateDesc.FromOverlay((frame.Background ?? OverlayMotion.Transparent).ToClay()), ClayTransitionEnterTrigger.OnFirstParentFrame);
         return frame;
     }
 
@@ -126,6 +130,8 @@ public sealed class TooltipLayer : Container
         {
             _label.Text = target.Tooltip ?? "";
             _label.FontSize = TooltipSettings.FontSize;
+            _label.FontId = TooltipSettings.FontId;
+            _label.Color = TooltipSettings.TextColor;
             _frame.Children.Add(_label);
         }
 
