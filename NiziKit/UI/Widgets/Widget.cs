@@ -18,6 +18,7 @@ public abstract class Widget
     private Vector2 _exitOffset;
     private Color? _exitOverlay;
     private Action? _exitCompleted;
+    private Style? _style;
 
     public uint Id { get; } = Ui.AllocateWidgetId();
     public string? Name { get; set; }
@@ -40,13 +41,21 @@ public abstract class Widget
     public Color? Background { get; set; }
     public CornerRadius CornerRadius { get; init; }
     public Color? BorderColor { get; set; }
-    public float BorderWidth { get; set; } = 1;
+    public BorderThickness BorderWidth { get; set; } = 1;
     public float BorderBetweenChildren { get; set; }
     public bool ClipChildren { get; set; }
     public float AspectRatio { get; init; }
     public ClayTransitionDesc? Transition { get; set; }
     public Floating? Floating { get; set; }
     public Color? Overlay { get; set; }
+
+    public Style Style
+    {
+        get => _style ??= new Style();
+        set => _style = value;
+    }
+
+    public bool HasStyle => _style != null;
 
     public bool IsVisible { get; private set; } = true;
     public bool IsEnabled { get; private set; } = true;
@@ -97,6 +106,14 @@ public abstract class Widget
         }
 
         return result;
+    }
+
+    protected virtual Widget StyleSource => this;
+
+    protected virtual bool IsChecked => false;
+
+    protected virtual void OnStyleResolved(in StyleState state)
+    {
     }
 
     protected virtual bool TracksPointer =>
@@ -540,7 +557,14 @@ public abstract class Widget
         if (BorderColor is { } borderColor)
         {
             decl.Border.Color = borderColor.ToClay();
-            decl.Border.Width = ClayBorderWidth.Create(BorderWidth, BorderWidth, BorderWidth, BorderWidth, BorderBetweenChildren);
+            decl.Border.Width = BorderWidth.ToClay(BorderBetweenChildren);
+        }
+
+        if (_style != null)
+        {
+            var state = _style.Resolve(StyleSource, IsChecked);
+            state.Apply(ref decl, BorderBetweenChildren);
+            OnStyleResolved(in state);
         }
 
         if (ClipChildren)

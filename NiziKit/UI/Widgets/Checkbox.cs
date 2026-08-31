@@ -14,6 +14,14 @@ public class Checkbox : HStack
         Height = 32;
         Focusable = true;
         _box = new CheckBoxMark(this);
+        _box.Style = new Style
+        {
+            Normal = new StyleState { Background = Color.Rgb(28, 30, 38), Border = Color.Rgb(70, 76, 94), BorderWidth = 1, Text = Color.Rgb(235, 235, 240) },
+            Hover = new StyleState { Border = Color.Rgb(113, 149, 242) },
+            Checked = new StyleState { Background = Color.Rgb(88, 130, 240), Border = Color.Rgb(88, 130, 240) },
+            Disabled = new StyleState { Background = Color.Rgb(46, 50, 62), Border = Color.Rgb(46, 50, 62), Text = Color.Rgb(160, 165, 180) },
+            Focused = new StyleState { Border = Color.Rgb(88, 130, 240), BorderWidth = 2 }
+        };
         _label = new Label { Wrap = false };
         Children.Add(_box);
         Children.Add(_label);
@@ -64,14 +72,11 @@ public class Checkbox : HStack
         set => _label.FontId = value;
     }
 
-    public Style Style { get; set; } = new()
+    public Style BoxStyle
     {
-        Normal = new StyleState { Background = Color.Rgb(28, 30, 38), Border = Color.Rgb(70, 76, 94), BorderWidth = 1, Text = Color.Rgb(235, 235, 240) },
-        Hover = new StyleState { Border = Color.Rgb(113, 149, 242) },
-        Checked = new StyleState { Background = Color.Rgb(88, 130, 240), Border = Color.Rgb(88, 130, 240) },
-        Disabled = new StyleState { Background = Color.Rgb(46, 50, 62), Border = Color.Rgb(46, 50, 62), Text = Color.Rgb(160, 165, 180) },
-        Focused = new StyleState { Border = Color.Rgb(88, 130, 240), BorderWidth = 2 }
-    };
+        get => _box.Style;
+        set => _box.Style = value;
+    }
 
     public bool AnimateHover { get; set; } = true;
 
@@ -92,7 +97,7 @@ public class Checkbox : HStack
     protected override void ApplyDeclaration(ref ClayElementDeclaration decl)
     {
         base.ApplyDeclaration(ref decl);
-        if (Style.Resolve(this).Text is { } text)
+        if (BoxStyle.Resolve(this, Checked).Text is { } text)
         {
             _label.Color = text;
         }
@@ -109,14 +114,20 @@ public class Checkbox : HStack
             CornerRadius = 4;
         }
 
+        protected override Widget StyleSource => _owner;
+
+        protected override bool IsChecked => _owner.Checked;
+
+        protected override void OnStyleResolved(in StyleState state)
+        {
+            _markColor = state.Text ?? Color.Rgb(235, 235, 240);
+        }
+
         protected override void ApplyDeclaration(ref ClayElementDeclaration decl)
         {
             Width = _owner.BoxSize;
             Height = _owner.BoxSize;
             base.ApplyDeclaration(ref decl);
-
-            var state = _owner.Style.Resolve(_owner, _owner.Checked);
-            state.Apply(this, ref decl);
 
             if (_owner.AnimateHover)
             {
@@ -125,7 +136,6 @@ public class Checkbox : HStack
 
             decl.Layout.ChildAlignment.X = ClayAlignmentX.Center;
             decl.Layout.ChildAlignment.Y = ClayAlignmentY.Center;
-            _markColor = state.Text ?? Color.Rgb(235, 235, 240);
         }
 
         protected override void BuildContent()

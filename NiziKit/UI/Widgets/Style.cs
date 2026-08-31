@@ -7,7 +7,7 @@ public struct StyleState
     public Color? Background;
     public Color? Border;
     public Color? Text;
-    public float? BorderWidth;
+    public BorderThickness? BorderWidth;
     public CornerRadius? CornerRadius;
 
     public void Layer(in StyleState over)
@@ -39,10 +39,11 @@ public struct StyleState
     }
 
     /// <summary>
-    /// Writes the resolved state onto the declaration. A <see cref="Widget.BorderColor"/> set
-    /// directly on the widget always wins over the style's border.
+    /// Writes the resolved state onto the declaration. Whatever the state sets wins over the
+    /// widget's own <see cref="Widget.Background"/>, <see cref="Widget.BorderColor"/> and
+    /// <see cref="Widget.CornerRadius"/> whatever it leaves unset falls through to them.
     /// </summary>
-    public void Apply(Widget widget, ref ClayElementDeclaration decl)
+    public void Apply(ref ClayElementDeclaration decl, float betweenChildren = 0)
     {
         if (Background is { } background)
         {
@@ -54,10 +55,14 @@ public struct StyleState
             decl.BorderRadius = radius.ToClay();
         }
 
-        if (widget.BorderColor == null && Border is { } border)
+        if (Border is { } border)
         {
             decl.Border.Color = border.ToClay();
-            decl.Border.Width = ClayBorderWidth.CreateUniform(BorderWidth ?? 1);
+            decl.Border.Width = (BorderWidth ?? new BorderThickness(1)).ToClay(betweenChildren);
+        }
+        else if (BorderWidth is { } width)
+        {
+            decl.Border.Width = width.ToClay(betweenChildren);
         }
     }
 }
@@ -85,11 +90,6 @@ public sealed class Style
     public StyleState Resolve(Widget w, bool isChecked = false)
     {
         var result = Normal;
-        if (isChecked)
-        {
-            result.Layer(in Checked);
-        }
-
         if (w.IsFocused)
         {
             result.Layer(in Focused);
@@ -103,6 +103,11 @@ public sealed class Style
         if (w.IsPressed)
         {
             result.Layer(in Pressed);
+        }
+
+        if (isChecked)
+        {
+            result.Layer(in Checked);
         }
 
         if (!w.IsEnabled)

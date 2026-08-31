@@ -42,6 +42,14 @@ public class Label : Widget
         decl.Layout.ChildAlignment.Y = VerticalAlign.ToClayY();
     }
 
+    protected override void OnStyleResolved(in StyleState state)
+    {
+        if (state.Text is { } text)
+        {
+            Color = text;
+        }
+    }
+
     protected override void BuildContent()
     {
         if (TextBinding != null)

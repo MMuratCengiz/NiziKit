@@ -33,7 +33,7 @@ public class Slider : Widget
     public float Step { get; init; }
     public float KnobSize { get; set; } = 14;
     public float TrackHeight { get; set; } = 4;
-    public SliderStyle Style { get; set; } = new();
+    public SliderStyle Parts { get; set; } = new();
     public bool ShowValue { get; init; }
     public string ValueFormat { get; init; } = "0.##";
     public float ValueWidth { get; set; } = 40;
@@ -190,7 +190,7 @@ public class Slider : Widget
 
     protected override void BuildContent()
     {
-        var style = Style;
+        var style = Parts;
         var bounds = Ui.Clay.GetElementBoundingBox(_trackId);
         var trackLength = Ui.Clay.PixelsToPoints(_vertical ? bounds.Height : bounds.Width);
         var offset = KnobSize * 0.5f + Normalized * MathF.Max(0, trackLength - KnobSize);

@@ -43,16 +43,6 @@ public class Dropdown : HStack
     /// <summary>Color of the caret glyph, which is a sub-element rather than a state of the box.</summary>
     public Color CaretColor { get; set; } = Color.Rgb(160, 165, 180);
 
-    /// <summary>Theming for the closed box. An open dropdown resolves as hovered and focused.</summary>
-    public Style Style { get; set; } = new()
-    {
-        Normal = new StyleState { Background = Color.Rgb(28, 30, 38), Border = Color.Rgb(70, 76, 94), BorderWidth = 1, Text = Color.Rgb(235, 235, 240) },
-        Hover = new StyleState { Background = Color.Rgb(44, 48, 60) },
-        Pressed = new StyleState { Background = Color.Rgb(46, 52, 70) },
-        Disabled = new StyleState { Background = Color.Rgb(46, 50, 62), Text = Color.Rgb(160, 165, 180) },
-        Focused = new StyleState { Border = Color.Rgb(88, 130, 240), BorderWidth = 1 }
-    };
-
     /// <summary>Theming for the list rows. The selected row resolves through <see cref="Widgets.Style.Checked"/>.</summary>
     public Style RowStyle { get; set; } = new()
     {
@@ -195,7 +185,7 @@ public class Dropdown : HStack
             state.Layer(in Style.Focused);
         }
 
-        state.Apply(this, ref decl);
+        state.Apply(ref decl);
 
         var selected = SelectedItem;
         _label.Text = selected ?? Placeholder;
@@ -251,7 +241,7 @@ public class Dropdown : HStack
             decl.Layout.ChildAlignment.Y = ClayAlignmentY.Center;
 
             var state = _owner.RowStyle.Resolve(this, _index == _owner.SelectedIndex);
-            state.Apply(this, ref decl);
+            state.Apply(ref decl);
             if (_label != null && state.Text is { } text)
             {
                 _label.Color = text;

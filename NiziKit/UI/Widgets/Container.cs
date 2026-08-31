@@ -53,8 +53,12 @@ public abstract class Container : Widget, IEnumerable<Widget>
     public bool ScrollHorizontal { get; set; }
     public bool ShowScrollbar { get; set; } = true;
     public float ScrollbarWidth { get; set; } = 6;
-    public Color ScrollbarColor { get; set; } = Color.Rgb(70, 76, 94);
-    public Color ScrollbarActiveColor { get; set; } = Color.Rgb(160, 165, 180);
+ 
+    public Style ScrollbarStyle { get; set; } = new()
+    {
+        Normal = new StyleState { Background = Color.Rgb(70, 76, 94) },
+        Hover = new StyleState { Background = Color.Rgb(160, 165, 180) }
+    };
 
     private ScrollThumb? _thumb;
 
@@ -232,8 +236,12 @@ internal sealed class ScrollThumb : Widget
         Width = _owner.ScrollbarWidth;
         Height = thumbPoints;
         _floating.Offset = new Vector2(-margin, margin + travel * t);
-        Background = IsDragging || IsHovered ? _owner.ScrollbarActiveColor : _owner.ScrollbarColor;
+        Style = _owner.ScrollbarStyle;
         base.ApplyDeclaration(ref decl);
+        if (IsDragging)
+        {
+            _owner.ScrollbarStyle.Hover.Apply(ref decl);
+        }
     }
 }
 

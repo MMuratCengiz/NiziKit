@@ -10,6 +10,15 @@ public class Button : StackPanel
 
     public Button() : base(Orientation.Horizontal)
     {
+        Style = new Style
+        {
+            Normal = new StyleState { Background = Color.Rgb(58, 66, 86), Text = Color.Rgb(235, 235, 240) },
+            Hover = new StyleState { Background = Color.Rgb(74, 84, 108) },
+            Pressed = new StyleState { Background = Color.Rgb(46, 52, 70) },
+            Checked = new StyleState { Background = Color.Rgb(88, 130, 240) },
+            Disabled = new StyleState { Background = Color.Rgb(46, 50, 62), Text = Color.Rgb(160, 165, 180) },
+            Focused = new StyleState { Border = Color.Rgb(88, 130, 240), BorderWidth = 1 }
+        };
         Height = 32;
         Padding = new Thickness(14, 0);
         Gap = 8;
@@ -74,14 +83,9 @@ public class Button : StackPanel
 
     public bool AnimateHover { get; set; } = true;
 
-    public Style Style { get; set; } = new()
-    {
-        Normal = new StyleState { Background = Color.Rgb(58, 66, 86), Text = Color.Rgb(235, 235, 240) },
-        Hover = new StyleState { Background = Color.Rgb(74, 84, 108) },
-        Pressed = new StyleState { Background = Color.Rgb(46, 52, 70) },
-        Disabled = new StyleState { Background = Color.Rgb(46, 50, 62), Text = Color.Rgb(160, 165, 180) },
-        Focused = new StyleState { Border = Color.Rgb(88, 130, 240), BorderWidth = 1 }
-    };
+    public bool Checked { get; set; }
+
+    protected override bool IsChecked => Checked;
 
     protected override bool TracksPointer => true;
 
@@ -90,14 +94,14 @@ public class Button : StackPanel
     protected override void ApplyDeclaration(ref ClayElementDeclaration decl)
     {
         base.ApplyDeclaration(ref decl);
-        var state = Style.Resolve(this);
-        state.Apply(this, ref decl);
-
         if (AnimateHover && Transition == null)
         {
             decl.Transition = Style.HoverTransition;
         }
+    }
 
+    protected override void OnStyleResolved(in StyleState state)
+    {
         if (_label != null && state.Text is { } text)
         {
             _label.Color = text;

@@ -227,6 +227,12 @@ public class TextBox : Widget
         CornerRadius = 6;
         Background = Color.Rgb(28, 30, 38);
         BorderColor = Color.Rgb(70, 76, 94);
+        Style = new Style
+        {
+            Normal = new StyleState { Text = Color.Rgb(235, 235, 240) },
+            Focused = new StyleState { Border = Color.Rgb(88, 130, 240), BorderWidth = 1 },
+            Disabled = new StyleState { Background = Color.Rgb(46, 50, 62), Text = Color.Rgb(160, 165, 180) }
+        };
         ClipChildren = true;
     }
 
@@ -253,10 +259,8 @@ public class TextBox : Widget
     public int MaxLength { get; set; } = int.MaxValue;
     public int FontSize { get; set; } = 14;
     public ushort FontId { get; set; } = Fonts.DefaultFontId;
-    public Color TextColor { get; set; } = Color.Rgb(235, 235, 240);
-    public Color DisabledTextColor { get; set; } = Color.Rgb(160, 165, 180);
     public Color PlaceholderColor { get; set; } = Color.Rgb(120, 125, 140);
-    public Color FocusBorderColor { get; set; } = Color.Rgb(88, 130, 240);
+    public Color CaretColor { get; set; } = Color.Rgb(235, 235, 240);
     public Color SelectionColor { get; set; } = Color.Rgba(88, 130, 240, 90);
     public bool IsPassword { get; init; }
     public char PasswordChar { get; set; } = '•';
@@ -282,6 +286,16 @@ public class TextBox : Widget
 
     public event Action<TextBox>? TextChanged;
     public event Action<TextBox>? Submitted;
+
+    private Color _resolvedText = Color.Rgb(235, 235, 240);
+
+    protected override void OnStyleResolved(in StyleState state)
+    {
+        if (state.Text is { } text)
+        {
+            _resolvedText = text;
+        }
+    }
 
     private ushort ResolvedFontSize => (ushort)FontSize;
     private ushort ResolvedFontId => FontId;
@@ -694,13 +708,6 @@ public class TextBox : Widget
         base.ApplyDeclaration(ref decl);
         UpdateMetrics();
         decl.Layout.ChildAlignment.Y = ClayAlignmentY.Center;
-        Color? border = IsFocused ? FocusBorderColor : BorderColor;
-        if (border is { } borderColor)
-        {
-            decl.Border.Color = borderColor.ToClay();
-            decl.Border.Width = ClayBorderWidth.CreateUniform(BorderWidth);
-        }
-
         decl.Clip = ClayClipDesc.Create(true, false, new Vector2(-Ui.Clay.PixelsToPoints(_scroll), 0));
     }
 
@@ -717,7 +724,7 @@ public class TextBox : Widget
         var length = _display.Length;
         if (length > 0)
         {
-            desc.TextColor = (IsEnabled ? TextColor : DisabledTextColor).ToClay();
+            desc.TextColor = _resolvedText.ToClay();
             if (HasSelection)
             {
                 var start = SelectionStart;
@@ -761,7 +768,7 @@ public class TextBox : Widget
         var cursor = ClayElementDeclaration.Default();
         cursor.Layout.Sizing.Width = ClaySizingAxis.Fixed(1.5f);
         cursor.Layout.Sizing.Height = ClaySizingAxis.Fixed(fontSize + 4);
-        cursor.BackgroundColor = TextColor.ToClay();
+        cursor.BackgroundColor = CaretColor.ToClay();
         cursor.Floating.AttachTo = ClayFloatingAttachTo.Parent;
         cursor.Floating.ZIndex = Ui.FloatingZIndex;
         cursor.Floating.ElementAttachPoint = ClayFloatingAttachPoint.LeftCenter;

@@ -116,6 +116,26 @@ public readonly struct CornerRadius(float topLeft, float topRight, float bottomL
     }
 }
 
+public readonly struct BorderThickness(float left, float right, float top, float bottom)
+{
+    public readonly float Left = left;
+    public readonly float Right = right;
+    public readonly float Top = top;
+    public readonly float Bottom = bottom;
+
+    public BorderThickness(float all) : this(all, all, all, all)
+    {
+    }
+
+    public static implicit operator BorderThickness(float all) => new(all);
+    public static implicit operator BorderThickness(int all) => new(all);
+
+    public ClayBorderWidth ToClay(float betweenChildren = 0)
+    {
+        return ClayBorderWidth.Create(Left, Right, Top, Bottom, betweenChildren);
+    }
+}
+
 public enum Align
 {
     Start,
