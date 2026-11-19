@@ -26,6 +26,37 @@ public static partial class Ui
     /// </summary>
     public static bool IsPointerOverUi { get; internal set; }
 
+    private static float _displayScale = 1f;
+    private static float _scale = 1f;
+
+    public static float DisplayScale => _displayScale;
+
+    public static float Scale
+    {
+        get => _scale;
+        set
+        {
+            _scale = value > 0f ? value : 1f;
+            ApplyScale();
+        }
+    }
+
+    internal static void SetDisplayScale(float displayScale)
+    {
+        if (displayScale <= 0f || displayScale == _displayScale)
+        {
+            return;
+        }
+
+        _displayScale = displayScale;
+        ApplyScale();
+    }
+
+    private static void ApplyScale()
+    {
+        _clay?.SetDisplayScale(_displayScale * _scale);
+    }
+
     public static void Initialize()
     {
         if (_clay != null)
@@ -43,9 +74,13 @@ public static partial class Ui
             Height = GraphicsContext.Height,
             MaxNumElements = 8192,
             MaxNumTextMeasureCacheElements = 16384,
-            MaxNumFonts = 16
+            MaxNumFonts = 16,
+            Window = GraphicsContext.Window
         });
         _clay.SetViewportSize(GraphicsContext.Width, GraphicsContext.Height);
+        var displayScale = GraphicsContext.Window.GetDisplayScale();
+        _displayScale = displayScale > 0f ? displayScale : 1f;
+        ApplyScale();
         GraphicsContext.OnResize += HandleResize;
         FontAwesome.TryInitialize();
     }
@@ -70,6 +105,12 @@ public static partial class Ui
     public static void HandleEvent(ref Event ev)
     {
         HandleWidgetEvent(ref ev);
+
+        if (ev is { Type: EventType.WindowEvent, Window.Event: WindowEventType.PixelSizeChanged })
+        {
+            return;
+        }
+
         Clay.HandleEvent(in ev);
     }
 
@@ -111,9 +152,22 @@ public static partial class Ui
     [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "get_Handle")]
     private static extern ulong GetHandle(Semaphore semaphore);
 
+    [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "_cachedTextures")]
+    private static extern ref Texture?[]? CachedRenderTargets(Clay clay);
+
     private static void HandleResize(uint width, uint height)
     {
-        _clay?.SetViewportSize(width, height);
+        if (_clay == null)
+        {
+            return;
+        }
+
+        _clay.SetViewportSize(width, height);
+
+        if (CachedRenderTargets(_clay) is { } renderTargets)
+        {
+            Array.Clear(renderTargets);
+        }
     }
 
     public static Element Element(string? id = null)

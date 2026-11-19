@@ -393,7 +393,7 @@ public partial class RenderFrame : IDisposable
             new ReadOnlySpan<Semaphore>(_submitWaitSemaphores, 0, waitCount),
             new ReadOnlySpan<Semaphore>(_submitSignalSemaphores, 0, 1));
 
-        GraphicsContext.SwapChain.Present((uint)_currentFrame);
+        GraphicsContext.Present();
     }
 
     public void Present(CycledTexture sourceTexture)

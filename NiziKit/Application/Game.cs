@@ -1,10 +1,12 @@
 using System.Runtime.CompilerServices;
 using DenOfIz;
+using Microsoft.Extensions.Logging;
 using NiziKit.Application.Timing;
 using NiziKit.Application.Windowing;
 using NiziKit.Core;
 using NiziKit.Graphics;
 using NiziKit.Graphics.Binding;
+using NiziKit.UI;
 
 namespace NiziKit.Application;
 
@@ -71,6 +73,7 @@ public class Game : IDisposable
         _time = new Time();
         InputSystem = new InputSystem();
         _graphics = new GraphicsContext(Window.NativeWindow, desc.Graphics);
+        GraphicsContext.ResizeCompleted += OnResize;
         _gpuBinding = new GpuBinding();
 
         _instance = this;
@@ -96,6 +99,10 @@ public class Game : IDisposable
     {
     }
 
+    protected virtual void OnDeviceLost()
+    {
+    }
+
     protected virtual void OnEvent(ref Event ev)
     {
     }
@@ -117,6 +124,7 @@ public class Game : IDisposable
             RunFrame();
         }
 
+        GraphicsContext.WaitIdle();
         OnShutdown();
     }
 
@@ -134,6 +142,9 @@ public class Game : IDisposable
 
         _disposed = true;
         _instance = null;
+
+        GraphicsContext.ResizeCompleted -= OnResize;
+        GraphicsContext.WaitIdle();
 
         _gpuBinding?.Dispose();
         _graphics?.Dispose();
@@ -177,8 +188,17 @@ public class Game : IDisposable
             return;
         }
 
+        Window.Refresh();
+        Ui.SetDisplayScale(Window.DisplayScale);
+
+        if (StopOnDeviceLost())
+        {
+            return;
+        }
+
         if (Window.IsMinimized)
         {
+            Thread.Sleep(16);
             return;
         }
 
@@ -188,8 +208,30 @@ public class Game : IDisposable
             FixedUpdate((float)_fixedTimestep.FixedDeltaTime);
         }
 
+        var canRender = GraphicsContext.AcquireFrame();
+        if (StopOnDeviceLost())
+        {
+            return;
+        }
+
         Update(Time.DeltaTime);
-        Render(Time.DeltaTime);
+        if (canRender)
+        {
+            Render(Time.DeltaTime);
+        }
+    }
+
+    private bool StopOnDeviceLost()
+    {
+        if (!GraphicsContext.IsDeviceLost)
+        {
+            return false;
+        }
+
+        Log.Get<Game>().LogCritical("GPU device lost, shutting down.");
+        IsRunning = false;
+        OnDeviceLost();
+        return true;
     }
 
     private void ProcessEvents()
@@ -204,15 +246,7 @@ public class Game : IDisposable
 
             if (ev.Type == EventType.WindowEvent)
             {
-                Window.HandleWindowEvent(ev.Window.Event, ev.Window.Data1, ev.Window.Data2);
-
-                if (ev.Window.Event == WindowEventType.SizeChanged)
-                {
-                    var width = (uint)ev.Window.Data1;
-                    var height = (uint)ev.Window.Data2;
-                    GraphicsContext.Resize(width, height);
-                    OnResize(width, height);
-                }
+                Window.HandleWindowEvent(ev.Window.Event);
             }
 
             OnEvent(ref ev);

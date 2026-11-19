@@ -8,11 +8,12 @@
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
         <IsPackable>true</IsPackable>
         <PackageId>NiziKit</PackageId>
+        <DenOfIzGraphicsVersion Condition="'$(DenOfIzGraphicsVersion)' == ''">1.0.0</DenOfIzGraphicsVersion>
         <Description>A thin managed layer over the DenOfIz graphics library: window management, input, game loop, and graphics helpers (passes, bindings, buffers) for building your own renderer on DirectX12, Vulkan, and Metal.</Description>
     </PropertyGroup>
 
     <ItemGroup>
-      <PackageReference Include="DenOfIzGraphics" Version="0.10.5-alpha" />
+      <PackageReference Include="DenOfIzGraphics" Version="1.0.0" />
       <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.0" />
       <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="9.0.0" />
     </ItemGroup>

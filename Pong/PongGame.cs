@@ -13,20 +13,42 @@ public class PongGame(GameDesc? desc) : Game(desc)
 {
     private QuadRenderer _renderer = null!;
     private Camera _camera = null!;
-    private Scene _scene = new();
+    private readonly Scene _scene = new();
 
-    private SceneObject _boardTop;
-    private SceneObject _boardBottom;
-    private SceneObject _ball;
-    private PongPhysics _pongPhysics;
+    private SceneObject _boardTop = null!;
+    private SceneObject _boardBottom = null!;
+    private SceneObject _ball = null!;
+    private PongPhysics _pongPhysics = null!;
 
     private int _topScore;
     private int _bottomScore;
 
+    public const float FieldWidth = 720f;
+    public const float FieldHeight = 1280f;
+
+    private static readonly Vector4 FieldColor = new(0.05f, 0.06f, 0.10f, 1.0f);
+
+    public static void FitCamera(Camera camera, uint width, uint height)
+    {
+        if (width == 0 || height == 0)
+        {
+            return;
+        }
+
+        var aspectRatio = width / (float)height;
+        var fieldAspectRatio = FieldWidth / FieldHeight;
+
+        camera.AspectRatio = aspectRatio;
+        camera.OrthographicSize = aspectRatio >= fieldAspectRatio
+            ? FieldHeight / 2f
+            : FieldWidth / aspectRatio / 2f;
+        camera.Position = new Vector3(FieldWidth / 2f, FieldHeight / 2f, 10f);
+    }
+
     protected override void Load()
     {
-        _camera = Camera.Orthographic(orthographicSize: Window.Height / 2f, aspectRatio: Window.Width / (float)Window.Height);
-        _camera.Position = new Vector3(Window.Width / 2f, Window.Height / 2f, 10f);
+        _camera = Camera.Orthographic(orthographicSize: FieldHeight / 2f, aspectRatio: FieldWidth / FieldHeight);
+        FitCamera(_camera, GraphicsContext.Width, GraphicsContext.Height);
 
         _renderer = new QuadRenderer(_scene);
         _renderer.DrawUi = DrawUi;
@@ -38,16 +60,22 @@ public class PongGame(GameDesc? desc) : Game(desc)
         const float boardHeight = 40.0f;
 
         {
+            var field = _scene.NewSceneObject();
+            field.Size = new Vector2(FieldWidth, FieldHeight);
+            field.Color = FieldColor;
+            field.Position = new Vector2(FieldWidth / 2f, FieldHeight / 2f);
+        }
+        {
             _boardTop = _scene.NewSceneObject();
             _boardTop.Size = new Vector2(boardWidth, boardHeight);
             _boardTop.Color = new Vector4(1.0f, 0.0f, 0.0f, 1.0f);
             _boardTop.Position =
-                new Vector2(Window.Width / 2f, Window.Height - _boardTop.Size.Y / 2f);
+                new Vector2(FieldWidth / 2f, FieldHeight - _boardTop.Size.Y / 2f);
         }
         {
             _ball = _scene.NewSceneObject();
             _ball.Size = new Vector2(25, 25);
-            _ball.Position = new Vector2(Window.Width / 2f, Window.Height / 2f);
+            _ball.Position = new Vector2(FieldWidth / 2f, FieldHeight / 2f);
             _ball.Color = new Vector4(1.0f, 1.0f, 1.0f, 1.0f);
         }
         {
@@ -55,10 +83,16 @@ public class PongGame(GameDesc? desc) : Game(desc)
             _boardBottom.Size = new Vector2(boardWidth, boardHeight);
             _boardBottom.Color = new Vector4(0.0f, 1.0f, 0.0f, 1.0f);
             _boardBottom.Position =
-                new Vector2(Window.Width / 2f, _boardBottom.Size.Y / 2f);
+                new Vector2(FieldWidth / 2f, _boardBottom.Size.Y / 2f);
         }
-        
-        _pongPhysics = new PongPhysics(_boardTop, _boardBottom, _ball, Window.Width, Window.Height);
+
+        _pongPhysics = new PongPhysics(_boardTop, _boardBottom, _ball, FieldWidth, FieldHeight);
+    }
+
+    private static void KeepInField(SceneObject board)
+    {
+        var halfWidth = board.Size.X / 2f;
+        board.Position.X = Math.Clamp(board.Position.X, halfWidth, FieldWidth - halfWidth);
     }
 
     protected override void Update(float dt)
@@ -90,6 +124,9 @@ public class PongGame(GameDesc? desc) : Game(desc)
         {
             _boardBottom.Position.X += speed * dt;
         }
+
+        KeepInField(_boardTop);
+        KeepInField(_boardBottom);
     }
 
     private static readonly Color TableBackground = Color.Rgba(20, 20, 30, 140);
@@ -101,7 +138,7 @@ public class PongGame(GameDesc? desc) : Game(desc)
     private const float ScoreCellWidth = 40;
     private const float CellHeight = 26;
 
-    void DrawUi()
+    private void DrawUi()
     {
         using (Ui.Column().Padding(12).AlignChildren(ClayAlignmentX.Right, ClayAlignmentY.Center).Open())
         {
@@ -137,12 +174,7 @@ public class PongGame(GameDesc? desc) : Game(desc)
 
     protected override void OnResize(uint width, uint height)
     {
-        if (height > 0)
-        {
-            _camera.OrthographicSize = height / 2f;
-            _camera.AspectRatio = width / (float)height;
-            _camera.Position = new Vector3(width / 2f, height / 2f, 10f);
-        }
+        FitCamera(_camera, width, height);
     }
 
     protected override void OnEvent(ref Event ev)

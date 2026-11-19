@@ -121,8 +121,7 @@ public class PresentPass : IDisposable
     public void Execute(CommandList commandList, Texture texture)
     {
         var frameIndex = GraphicsContext.FrameIndex;
-        var swapChainImageIndex = GraphicsContext.SwapChain.AcquireNextImage();
-        var swapChainImage = GraphicsContext.SwapChain.GetRenderTarget(swapChainImageIndex);
+        var swapChainImage = GraphicsContext.AcquireSwapChainImage();
 
         commandList.Begin();
 

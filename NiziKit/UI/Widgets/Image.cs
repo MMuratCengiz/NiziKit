@@ -35,7 +35,7 @@ public class Image : Widget
     public ImageFit Fit { get; init; } = ImageFit.Stretch;
     public Color? Tint { get; init; }
 
-    public bool HasSourceSize => SourceSize.X > 0 && SourceSize.Y > 0;
+    public bool HasSourceSize => SourceSize is { X: > 0, Y: > 0 };
 
     protected override void ApplyDeclaration(ref ClayElementDeclaration decl)
     {

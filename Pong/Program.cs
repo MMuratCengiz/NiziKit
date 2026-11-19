@@ -6,7 +6,7 @@ using Pong;
 Game.Run(() => new PongGame(new GameDesc
 {
     Title = "Pong",
-    Width = 720,
-    Height = 1280,
+    Width = 450,
+    Height = 800,
     Resizable = true
 }));

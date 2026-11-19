@@ -29,11 +29,20 @@ public sealed class GraphicsContext : IDisposable
     public static uint Width => Instance._width;
     public static uint Height => Instance._height;
     public static UniformBufferArena UniformBufferArena => Instance._uniformBufferArena;
-    public static void Resize(uint width, uint height) => Instance._QueueResize(width, height);
     public static void BeginFrame() => Instance._BeginFrame();
     public static void WaitIdle() => Instance._WaitIdle();
     public static DisplaySize GetWindowPixelSize() => Instance._window?.GetSizeInPixels() ?? new DisplaySize();
+
     public static event Action<uint, uint>? OnResize;
+
+    internal static event Action<uint, uint>? ResizeCompleted;
+    public static bool IsDeviceLost => _instance != null && _instance._IsDeviceLost();
+
+    public static bool AcquireFrame() => Instance._AcquireFrame();
+
+    internal static Texture AcquireSwapChainImage() => Instance._AcquireSwapChainImage();
+
+    internal static void Present() => Instance._Present();
 
     private readonly GraphicsApi _graphicsApi;
     private readonly LogicalDevice _logicalDevice;
@@ -56,9 +65,8 @@ public sealed class GraphicsContext : IDisposable
     private readonly UniformBufferArena _uniformBufferArena;
     private readonly Texture _nullTexture;
 
-    private bool _resizePending;
-    private uint _pendingWidth;
-    private uint _pendingHeight;
+    private Texture? _backBuffer;
+    private bool _deviceLost;
 
     public GraphicsContext(Window window, GraphicsDesc? desc = null)
     {
@@ -81,28 +89,20 @@ public sealed class GraphicsContext : IDisposable
         _computeQueue = _logicalDevice.CreateCommandQueue(new CommandQueueDesc { QueueType = QueueType.Compute });
         _copyQueue = _logicalDevice.CreateCommandQueue(new CommandQueueDesc { QueueType = QueueType.Copy });
 
-        var pixelSize = window.GetSizeInPixels();
-        _width = (uint)pixelSize.Width;
-        _height = (uint)pixelSize.Height;
-
         _swapChain = _logicalDevice.CreateSwapChain(new SwapChainDesc
         {
-            AllowTearing = desc.AllowTearing,
+            PresentMode = desc.PresentMode,
             BackBufferFormat = desc.BackBufferFormat,
-            DepthBufferFormat = desc.DepthBufferFormat,
+            DepthBufferFormat = Format.Undefined,
             CommandQueue = _graphicsQueue,
             WindowHandle = window.GetGraphicsWindowHandle(),
-            Width = _width,
-            Height = _height,
             NumBuffers = desc.NumFrames,
-            ColorSpace = ColorSpace.Srgb,
-            SampleCount = MSAASampleCount._1
+            ColorSpace = ColorSpace.Srgb
         });
 
-        for (uint i = 0; i < _numFrames; ++i)
-        {
-            _resourceTracking.TrackTexture(_swapChain.GetRenderTarget(i), QueueType.Graphics);
-        }
+        var swapChainDesc = _swapChain.GetDesc();
+        _width = swapChainDesc.Width;
+        _height = swapChainDesc.Height;
 
         _uniformBufferArena = new UniformBufferArena(_logicalDevice);
         _instance = this;
@@ -150,58 +150,83 @@ public sealed class GraphicsContext : IDisposable
         _instance = this;
     }
 
-    public static bool HasSwapChain => Instance._swapChain != null;
-
-    private void _QueueResize(uint width, uint height)
+    private bool _AcquireFrame()
     {
-        if (width == 0 || height == 0)
+        if (_deviceLost)
         {
-            return;
+            return false;
         }
 
-        if (width == _width && height == _height)
+        if (_backBuffer != null)
         {
-            return;
+            return true;
         }
 
-        _pendingWidth = width;
-        _pendingHeight = height;
-        _resizePending = true;
+        var result = _swapChain.AcquireNextImage(out var backBuffer);
+        if (result == Result.ErrorDeviceLost)
+        {
+            _deviceLost = true;
+        }
+
+        if (result != Result.Success || backBuffer == null)
+        {
+            return false;
+        }
+
+        _backBuffer = backBuffer;
+        _resourceTracking.TrackTexture(backBuffer, QueueType.Graphics);
+
+        var desc = _swapChain.GetDesc();
+        if (desc.Width != _width || desc.Height != _height)
+        {
+            _width = desc.Width;
+            _height = desc.Height;
+            OnResize?.Invoke(_width, _height);
+            ResizeCompleted?.Invoke(_width, _height);
+        }
+
+        return true;
     }
 
-    private void _ProcessPendingResize()
+    private Texture _AcquireSwapChainImage()
     {
-        if (!_resizePending)
+        if (!_AcquireFrame())
+        {
+            throw new InvalidOperationException("No swap chain image is available this frame.");
+        }
+
+        return _backBuffer!;
+    }
+
+    private void _Present()
+    {
+        if (_backBuffer == null)
         {
             return;
         }
 
-        _resizePending = false;
-        var width = _pendingWidth;
-        var height = _pendingHeight;
-
-        if (width == _width && height == _height)
+        var backBuffer = _backBuffer;
+        _backBuffer = null;
+        if (_swapChain.Present() == Result.ErrorDeviceLost)
         {
-            return;
+            _deviceLost = true;
         }
 
-        _WaitIdle();
+        _resourceTracking.UntrackTexture(backBuffer);
+    }
 
-        _swapChain.Resize(width, height);
-        _width = width;
-        _height = height;
-
-        for (uint i = 0; i < _numFrames; ++i)
+    private bool _IsDeviceLost()
+    {
+        if (!_deviceLost && _logicalDevice.IsDeviceLost())
         {
-            _resourceTracking.TrackTexture(_swapChain.GetRenderTarget(i), QueueType.Graphics);
+            _deviceLost = true;
         }
 
-        OnResize?.Invoke(width, height);
+        return _deviceLost;
     }
 
     public void _BeginFrame()
     {
-        _ProcessPendingResize();
         _currentFrame = _nextFrame;
         _nextFrame = (_nextFrame + 1) % (int)NumFrames;
     }
@@ -211,6 +236,7 @@ public sealed class GraphicsContext : IDisposable
         _logicalDevice.WaitIdle();
         _graphicsQueue.WaitIdle();
         _computeQueue.WaitIdle();
+        _copyQueue.WaitIdle();
     }
 
     public void Dispose()

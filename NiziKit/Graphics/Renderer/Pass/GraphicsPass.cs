@@ -70,16 +70,12 @@ public class GraphicsPass(CommandList commandList) : RenderPass(commandList)
         }
     }
 
-    public uint SwapChainImageIndex { get; private set; }
-
 
     public void SetSwapChainRenderTarget(Vector4 clearColor = default, LoadOp loadOp = LoadOp.Clear, StoreOp storeOp = StoreOp.Store)
     {
-        var imageIndex = GraphicsContext.SwapChain.AcquireNextImage();
-        var texture = GraphicsContext.SwapChain.GetRenderTarget(imageIndex);
+        var texture = GraphicsContext.AcquireSwapChainImage();
         SetRenderTarget(0, texture, GraphicsContext.Width, GraphicsContext.Height, clearColor, loadOp, storeOp);
         _transitionToPresent = texture;
-        SwapChainImageIndex = imageIndex;
     }
 
     public void SetRenderTarget(int slot, Texture texture, uint width, uint height, Vector4 clearColor = default,
@@ -147,10 +143,6 @@ public class GraphicsPass(CommandList commandList) : RenderPass(commandList)
         _hasStencil = true;
     }
 
-    /// <summary>
-    /// Declares a texture this pass will sample, so it is transitioned to ShaderResource
-    /// before rendering begins. Call before <see cref="RenderPass.Begin"/>.
-    /// </summary>
     public void SampleTexture(CycledTexture texture) => SampleTexture(texture[GraphicsContext.FrameIndex]);
 
     public void SampleTexture(Texture texture)
@@ -167,10 +159,6 @@ public class GraphicsPass(CommandList commandList) : RenderPass(commandList)
         _hasViewport = true;
     }
 
-    /// <summary>
-    /// Sets the number of render target array layers for layered rendering (e.g. CSM).
-    /// Must be called before <see cref="RenderPass.Begin"/>.
-    /// </summary>
     public void SetNumLayers(uint numLayers) => _numLayers = numLayers;
 
     public void SetScissor(float x, float y, float width, float height)

@@ -6,6 +6,7 @@ public sealed class AppWindow : IDisposable
 {
     public uint Width { get; private set; }
     public uint Height { get; private set; }
+    public float DisplayScale { get; private set; } = 1f;
     public bool IsMinimized { get; private set; }
     public bool HasFocus { get; private set; } = true;
     public GraphicsWindowHandle GraphicsHandle => NativeWindow.GetGraphicsWindowHandle();
@@ -25,9 +26,25 @@ public sealed class AppWindow : IDisposable
 
         NativeWindow.Sync();
 
+        Refresh();
+    }
+
+    internal void Refresh()
+    {
         var pixelSize = NativeWindow.GetSizeInPixels();
-        Width = (uint)pixelSize.Width;
-        Height = (uint)pixelSize.Height;
+        if (pixelSize is { Width: > 0, Height: > 0 })
+        {
+            Width = (uint)pixelSize.Width;
+            Height = (uint)pixelSize.Height;
+        }
+
+        IsMinimized = NativeWindow.IsMinimized();
+
+        var displayScale = NativeWindow.GetDisplayScale();
+        if (displayScale > 0f)
+        {
+            DisplayScale = displayScale;
+        }
     }
 
     public void Dispose()
@@ -45,13 +62,12 @@ public sealed class AppWindow : IDisposable
         NativeWindow.Hide();
     }
 
-    internal void HandleWindowEvent(WindowEventType eventType, int data1, int data2)
+    internal void HandleWindowEvent(WindowEventType eventType)
     {
         switch (eventType)
         {
-            case WindowEventType.SizeChanged:
-                Width = (uint)data1;
-                Height = (uint)data2;
+            case WindowEventType.PixelSizeChanged:
+                Refresh();
                 break;
             case WindowEventType.Minimized:
                 IsMinimized = true;

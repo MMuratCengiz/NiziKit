@@ -75,7 +75,7 @@ public static partial class Ui
     /// </summary>
     internal static uint Bit(MouseButton button) => 1u << (int)button;
 
-    internal static bool IsTracked(MouseButton button) => button >= MouseButton.Left && button <= MouseButton.X2;
+    internal static bool IsTracked(MouseButton button) => button is >= MouseButton.Left and <= MouseButton.X2;
 
     public static bool IsButtonDown(MouseButton button)
     {
@@ -185,7 +185,7 @@ public static partial class Ui
         {
             var index = reverse ? (start - step + count * 2) % count : (start + step) % count;
             var candidate = FrameWidgets[index];
-            if (candidate.Focusable && candidate.IsEnabled && candidate.IsVisible)
+            if (candidate is { Focusable: true, IsEnabled: true, IsVisible: true })
             {
                 SetFocus(candidate);
                 return;
