@@ -74,11 +74,11 @@ public abstract class Container : Widget, IEnumerable<Widget>
         Ui.Clay.SetScrollPosition(Id, new Vector2(data.ScrollPosition.X, -y));
     }
 
+    private const float PastEnd = -1e7f;
+
     public void ScrollToEnd()
     {
-        var data = ScrollData;
-        var max = MathF.Max(0, data.ContentSize.Height - data.ContainerSize.Height);
-        Ui.Clay.SetScrollPosition(Id, new Vector2(data.ScrollPosition.X, -max));
+        Ui.Clay.SetScrollPosition(Id, new Vector2(ScrollData.ScrollPosition.X, PastEnd));
     }
 
     public virtual void Add(Widget widget)
