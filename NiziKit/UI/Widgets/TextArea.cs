@@ -707,6 +707,7 @@ public class TextArea : Widget
 
                 break;
             case KeyCode.Return:
+            case KeyCode.KeypadEnter:
                 if (ctrl)
                 {
                     Submitted?.Invoke(this);

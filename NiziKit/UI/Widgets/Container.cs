@@ -64,6 +64,8 @@ public abstract class Container : Widget, IEnumerable<Widget>
 
     public ClayScrollContainerData ScrollData => Ui.Clay.GetScrollContainerData(Id);
 
+    internal bool PointerOverScrollbar => _thumb != null && Ui.Clay.PointerOver(_thumb.Id);
+
     public void ScrollTo(float offsetPoints)
     {
         var data = ScrollData;
@@ -197,6 +199,8 @@ internal sealed class ScrollThumb : Widget
         CapturePointer = true
     };
 
+    private bool _dragging;
+    private float _dragStart;
     private float _dragStartScroll;
     private float _ratio;
 
@@ -204,20 +208,41 @@ internal sealed class ScrollThumb : Widget
     {
         _owner = owner;
         Floating = _floating;
-        Draggable = true;
         CornerRadius = 3;
-        Visible = false;
-        DragStarted += (_, _) => _dragStartScroll = -_owner.ScrollData.ScrollPosition.Y;
-        Dragging += (_, e) =>
-        {
-            var data = _owner.ScrollData;
-            var max = MathF.Max(0, data.ContentSize.Height - data.ContainerSize.Height);
-            var y = Math.Clamp(_dragStartScroll + e.TotalDelta.Y * _ratio, 0, max);
-            Ui.Clay.SetScrollPosition(_owner.Id, new Vector2(data.ScrollPosition.X, -y));
-        };
+        VisibleWhen = HasOverflow;
     }
 
     protected override bool TracksPointer => true;
+
+    private bool HasOverflow()
+    {
+        var data = _owner.ScrollData;
+        return data.Found && data.ContentSize.Height - data.ContainerSize.Height > 1 && data.ContainerSize.Height > 0;
+    }
+
+    protected override void OnPoll()
+    {
+        if (Ui.PointerPressedThisFrame && IsHovered)
+        {
+            _dragging = true;
+            _dragStart = Ui.PointerPosition.Y;
+            _dragStartScroll = -_owner.ScrollData.ScrollPosition.Y;
+        }
+        else if (!Ui.PointerDown)
+        {
+            _dragging = false;
+        }
+
+        if (!_dragging)
+        {
+            return;
+        }
+
+        var data = _owner.ScrollData;
+        var max = MathF.Max(0, data.ContentSize.Height - data.ContainerSize.Height);
+        var y = Math.Clamp(_dragStartScroll + (Ui.PointerPosition.Y - _dragStart) * _ratio, 0, max);
+        Ui.Clay.SetScrollPosition(_owner.Id, new Vector2(data.ScrollPosition.X, -y));
+    }
 
     protected override void ApplyDeclaration(ref ClayElementDeclaration decl)
     {
@@ -225,7 +250,6 @@ internal sealed class ScrollThumb : Widget
         var container = data.ContainerSize.Height;
         var content = data.ContentSize.Height;
         var overflow = content - container;
-        Visible = data.Found && overflow > 1 && container > 0;
         const float margin = 2f;
         var trackPoints = Ui.Clay.PixelsToPoints(container) - margin * 2;
         var thumbPoints = MathF.Min(MathF.Max(24, trackPoints * container / MathF.Max(content, 1)), trackPoints);
@@ -238,7 +262,7 @@ internal sealed class ScrollThumb : Widget
         _floating.Offset = new Vector2(-margin, margin + travel * t);
         Style = _owner.ScrollbarStyle;
         base.ApplyDeclaration(ref decl);
-        if (IsDragging)
+        if (_dragging)
         {
             _owner.ScrollbarStyle.Hover.Apply(ref decl);
         }

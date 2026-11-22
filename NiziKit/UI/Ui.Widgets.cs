@@ -333,6 +333,7 @@ public static partial class Ui
                 FocusNext(shift);
                 return;
             case KeyCode.Return:
+            case KeyCode.KeypadEnter:
             case KeyCode.Space:
                 if (Focused is { IsKeyActivatable: true })
                 {

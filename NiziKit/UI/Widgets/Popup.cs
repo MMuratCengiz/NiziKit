@@ -75,19 +75,24 @@ public class Popup : StackPanel
     public void Open(Floating placement)
     {
         placement.CapturePointer = CapturePointer;
+        var raise = !IsOpen || (Backdrop != null && _backdrop?.Parent != Ui.Overlays);
         if (Backdrop is { } backdrop)
         {
             _backdrop ??= new PopupBackdrop(this);
             _backdrop.CancelExit();
             _backdrop.Background = backdrop;
-            _backdrop.Floating = new Floating { AttachTo = AttachTo.Root, ZIndex = Ui.NextZIndex() };
+            if (raise)
+            {
+                _backdrop.Floating = new Floating { AttachTo = AttachTo.Root, ZIndex = Ui.NextZIndex() };
+            }
+
             if (_backdrop.Parent != Ui.Overlays)
             {
                 Ui.Overlays.Add(_backdrop);
             }
         }
 
-        placement.ZIndex = Ui.NextZIndex();
+        placement.ZIndex = raise || Floating == null ? Ui.NextZIndex() : Floating.ZIndex;
         Floating = placement;
         if (IsOpen)
         {
@@ -218,6 +223,11 @@ public class Popup : StackPanel
 
     private static bool FloatingDescendantHit(Container container)
     {
+        if (container.PointerOverScrollbar)
+        {
+            return true;
+        }
+
         var children = container.Children;
         for (var i = 0; i < children.Count; i++)
         {
@@ -307,6 +317,11 @@ public class Popup : StackPanel
 
     protected virtual void OnClosed()
     {
+    }
+
+    protected override bool HitTest()
+    {
+        return CapturePointer && base.HitTest();
     }
 
     protected override void OnPoll()

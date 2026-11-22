@@ -244,14 +244,25 @@ public class TextBox : Widget
     public string Text
     {
         get => _text ??= _buffer.ToString();
-        init
+    set
         {
+            var previous = Text;
             _buffer.Clear();
             _buffer.Append(value);
-            _text = value;
-            _cursor = Math.Clamp(_cursor, 0, _buffer.Length);
+            if (_buffer.Length > MaxLength)
+            {
+                _buffer.Length = Math.Max(0, MaxLength);
+            }
+
+            _text = null;
+            _cursor = _buffer.Length;
             _anchor = -1;
+            _selecting = false;
             Touch();
+            if (!_buffer.Equals(previous.AsSpan()))
+            {
+                TextChanged?.Invoke(this);
+            }
         }
     }
 
@@ -667,6 +678,7 @@ public class TextBox : Widget
                 MoveCursor(_buffer.Length, shift);
                 break;
             case KeyCode.Return:
+            case KeyCode.KeypadEnter:
                 Submitted?.Invoke(this);
                 break;
             case KeyCode.Escape:
