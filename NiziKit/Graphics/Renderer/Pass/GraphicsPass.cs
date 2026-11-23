@@ -23,7 +23,6 @@ public class GraphicsPass(CommandList commandList) : RenderPass(commandList)
     private bool _hasDepth;
     private bool _hasStencil;
 
-    private GpuShader? _boundShader;
     private Texture? _transitionToPresent;
     private readonly List<Texture> _sampledTextures = [];
 
@@ -179,19 +178,12 @@ public class GraphicsPass(CommandList commandList) : RenderPass(commandList)
         _hasStencil = false;
         _hasViewport = false;
         _hasScissor = false;
-        _boundShader = null;
         _transitionToPresent = null;
         _sampledTextures.Clear();
         _numLayers = 1;
         Array.Clear(_rtTextures);
         _depthTexture = null;
         _stencilTexture = null;
-    }
-
-    public void BindShader(GpuShader shader)
-    {
-        _boundShader = shader;
-        BindPipeline(shader.Pipeline);
     }
 
     protected override void BeginInternal()

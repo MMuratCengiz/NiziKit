@@ -1,7 +1,3 @@
 <Solution>
-  <Folder Name="/Demos/">
-    <Project Path="Pong/Pong.csproj" />
-    <Project Path="Swarm/Swarm.csproj" />
-  </Folder>
   <Project Path="NiziKit/NiziKit.csproj" />
 </Solution>
