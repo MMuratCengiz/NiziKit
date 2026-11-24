@@ -138,19 +138,13 @@ public static partial class Ui
     {
         var (texture, semaphore) = Clay.EndAndRenderLayout((uint)GraphicsContext.FrameIndex, dt);
         EndInput();
-        if (GetHandle(texture) == 0 || GetHandle(semaphore) == 0)
+        if ((ulong)texture == 0 || (ulong)semaphore == 0)
         {
             return null;
         }
 
         return (texture, semaphore);
     }
-
-    [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "get_Handle")]
-    private static extern ulong GetHandle(Texture texture);
-
-    [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "get_Handle")]
-    private static extern ulong GetHandle(Semaphore semaphore);
 
     [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "_cachedTextures")]
     private static extern ref Texture?[]? CachedRenderTargets(Clay clay);

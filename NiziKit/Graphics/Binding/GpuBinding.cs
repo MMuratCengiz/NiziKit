@@ -22,7 +22,8 @@ public sealed class GpuBinding : IDisposable
     private TBinding _Get<TBinding>(object target) where TBinding : IShaderBinding, new()
     {
         var bindingType = typeof(TBinding);
-        var targetBindings = _bindings.GetOrAdd(bindingType, _ => new ConcurrentDictionary<object, IShaderBinding>());
+        var targetBindings = _bindings.GetOrAdd(bindingType,
+            _ => new ConcurrentDictionary<object, IShaderBinding>(ReferenceEqualityComparer.Instance));
 
         if (targetBindings.TryGetValue(target, out var existing))
         {
@@ -30,7 +31,13 @@ public sealed class GpuBinding : IDisposable
         }
 
         var binding = new TBinding();
-        return (TBinding)targetBindings.GetOrAdd(target, binding);
+        var stored = targetBindings.GetOrAdd(target, binding);
+        if (!ReferenceEquals(stored, binding))
+        {
+            binding.Dispose();
+        }
+
+        return (TBinding)stored;
     }
 
     public static void Remove<TBinding>(object target) where TBinding : IShaderBinding

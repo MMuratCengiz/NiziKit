@@ -13,15 +13,10 @@ public sealed class GraphicsContext : IDisposable
     public static GraphicsApi GraphicsApi => Instance._graphicsApi;
     public static LogicalDevice Device => Instance._logicalDevice;
     public static SwapChain SwapChain => Instance._swapChain;
-    public static CommandQueue GraphicsQueue => Instance._graphicsQueue;
-    public static CommandQueue ComputeQueue => Instance._computeQueue;
-    public static CommandQueue CopyQueue => Instance._copyQueue;
     public static ResourceTracking ResourceTracking => Instance._resourceTracking;
-
     public static CommandQueue GraphicsCommandQueue => Instance._graphicsQueue;
     public static CommandQueue ComputeCommandQueue => Instance._computeQueue;
     public static CommandQueue CopyCommandQueue => Instance._copyQueue;
-    public static Texture NullTexture => Instance._nullTexture;
     public static uint NumFrames => Instance._numFrames;
     public static Format BackBufferFormat => Instance._backBufferFormat;
     public static Format DepthBufferFormat => Instance._depthBufferFormat;
@@ -63,15 +58,20 @@ public sealed class GraphicsContext : IDisposable
     private uint _width;
     private uint _height;
     private readonly UniformBufferArena _uniformBufferArena;
-    private readonly Texture _nullTexture;
 
     private Texture? _backBuffer;
     private bool _deviceLost;
 
-    public GraphicsContext(Window window, GraphicsDesc? desc = null)
+    public GraphicsContext(Window window, GraphicsDesc? desc = null) : this(desc ?? new GraphicsDesc(), window)
     {
-        desc ??= new GraphicsDesc();
+    }
 
+    public GraphicsContext(GraphicsDesc? desc = null) : this(desc ?? new GraphicsDesc(), null)
+    {
+    }
+
+    private GraphicsContext(GraphicsDesc desc, Window? window)
+    {
         _numFrames = desc.NumFrames;
         _backBufferFormat = desc.BackBufferFormat;
         _depthBufferFormat = desc.DepthBufferFormat;
@@ -89,65 +89,35 @@ public sealed class GraphicsContext : IDisposable
         _computeQueue = _logicalDevice.CreateCommandQueue(new CommandQueueDesc { QueueType = QueueType.Compute });
         _copyQueue = _logicalDevice.CreateCommandQueue(new CommandQueueDesc { QueueType = QueueType.Copy });
 
-        _swapChain = _logicalDevice.CreateSwapChain(new SwapChainDesc
+        if (window != null)
         {
-            PresentMode = desc.PresentMode,
-            BackBufferFormat = desc.BackBufferFormat,
-            DepthBufferFormat = Format.Undefined,
-            CommandQueue = _graphicsQueue,
-            WindowHandle = window.GetGraphicsWindowHandle(),
-            NumBuffers = desc.NumFrames,
-            ColorSpace = ColorSpace.Srgb
-        });
+            _swapChain = _logicalDevice.CreateSwapChain(new SwapChainDesc
+            {
+                PresentMode = desc.PresentMode,
+                BackBufferFormat = desc.BackBufferFormat,
+                DepthBufferFormat = Format.Undefined,
+                CommandQueue = _graphicsQueue,
+                WindowHandle = window.GetGraphicsWindowHandle(),
+                NumBuffers = desc.NumFrames,
+                ColorSpace = ColorSpace.Srgb
+            });
 
-        var swapChainDesc = _swapChain.GetDesc();
-        _width = swapChainDesc.Width;
-        _height = swapChainDesc.Height;
+            var swapChainDesc = _swapChain.GetDesc();
+            _width = swapChainDesc.Width;
+            _height = swapChainDesc.Height;
+        }
+        else
+        {
+            _swapChain = null!;
+        }
 
         _uniformBufferArena = new UniformBufferArena(_logicalDevice);
         _instance = this;
-        var textureDesc = new TextureDesc
+
+        if (window != null)
         {
-            Width = 1,
-            Height = 1,
-            Depth = 1,
-            ArraySize = 1,
-            MipLevels = 1,
-            Format = Format.R8G8B8A8Unorm,
-            Usage = (uint)TextureUsageFlagBits.TextureBinding,
-            HeapType = HeapType.Gpu,
-            DebugName = StringView.Intern("ImGui Null Texture")
-        };
-        _nullTexture = _logicalDevice.CreateTexture(textureDesc);
-        Ui.Initialize();
-    }
-
-    public GraphicsContext(GraphicsDesc? desc = null)
-    {
-        desc ??= new GraphicsDesc();
-
-        _numFrames = desc.NumFrames;
-        _backBufferFormat = desc.BackBufferFormat;
-        _depthBufferFormat = desc.DepthBufferFormat;
-
-        _graphicsApi = new GraphicsApi(desc.ApiPreference);
-        _logicalDevice = _graphicsApi.CreateAndLoadOptimalLogicalDevice(new LogicalDeviceDesc
-        {
-#if DEBUG
-            EnableValidationLayers = true
-#endif
-        });
-
-        _graphicsQueue = _logicalDevice.CreateCommandQueue(new CommandQueueDesc { QueueType = QueueType.Graphics });
-        _computeQueue = _logicalDevice.CreateCommandQueue(new CommandQueueDesc { QueueType = QueueType.Compute });
-        _copyQueue = _logicalDevice.CreateCommandQueue(new CommandQueueDesc { QueueType = QueueType.Copy });
-
-        _width = 0;
-        _height = 0;
-        _swapChain = null!;
-
-        _uniformBufferArena = new UniformBufferArena(_logicalDevice);
-        _instance = this;
+            Ui.Initialize();
+        }
     }
 
     private bool _AcquireFrame()
@@ -243,7 +213,6 @@ public sealed class GraphicsContext : IDisposable
     {
         _WaitIdle();
         Ui.Shutdown();
-        _nullTexture?.Dispose();
         _resourceTracking.Dispose();
         _uniformBufferArena.Dispose();
         _swapChain?.Dispose();

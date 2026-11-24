@@ -50,23 +50,6 @@ public class CommandListAllocator : IDisposable
         }
     }
 
-    public void Reset(uint frameIndex)
-    {
-        ResetQueueData(_graphicsQueueData[frameIndex]);
-        ResetQueueData(_computeQueueData[frameIndex]);
-
-        return;
-
-        static void ResetQueueData(CommandQueueData queueData)
-        {
-            queueData.CurrentBucket = 0;
-            for (var i = 0; i < queueData.Buckets.Count; i++)
-            {
-                queueData.Buckets[i].FreeIndex = 0;
-            }
-        }
-    }
-
     public (CommandList, Semaphore) GetCommandList(QueueType type, uint frameIndex)
     {
         var queueData = type switch

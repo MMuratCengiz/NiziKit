@@ -17,7 +17,6 @@ public class BlitPass : IDisposable
     private readonly Lock _pipelineLock = new();
     private readonly BindGroup[] _bindGroups;
     private readonly Texture?[] _boundTextures;
-    private readonly PinnedArray<RenderingAttachmentDesc> _rtAttachment;
 
     public BlitPass()
     {
@@ -33,7 +32,7 @@ public class BlitPass : IDisposable
                 new ShaderStageDesc
                 {
                     EntryPoint = StringView.Create("PSMain"),
-                    Data = ByteArray.Create(Encoding.UTF8.GetBytes(PassShaders.BlitPsShader)),
+                    Data = ByteArray.Create(Encoding.UTF8.GetBytes(PassShaders.CopyTexture)),
                     Stage = (uint)ShaderStageFlagBits.Pixel
                 }
             ])
@@ -73,62 +72,22 @@ public class BlitPass : IDisposable
             });
         }
 
-        _rtAttachment = new PinnedArray<RenderingAttachmentDesc>(1);
-
         Parallel.ForEach(CommonFormats, format => GetOrCreatePipeline(format));
     }
 
-    public void Execute(CommandList commandList, CycledTexture source, CycledTexture dest)
+    public void Execute(GraphicsPass pass, Texture source, CycledTexture dest)
     {
         var frameIndex = GraphicsContext.FrameIndex;
-        Execute(commandList, source[frameIndex], dest[frameIndex], dest.Format, dest.Width, dest.Height);
-    }
-
-    public void Execute(CommandList commandList, Texture source, CycledTexture dest)
-    {
-        var frameIndex = GraphicsContext.FrameIndex;
-        Execute(commandList, source, dest[frameIndex], dest.Format, dest.Width, dest.Height);
-    }
-
-    private void Execute(CommandList commandList, Texture source, Texture dest, Format destFormat, uint width, uint height)
-    {
-        var frameIndex = GraphicsContext.FrameIndex;
-        var pipeline = GetOrCreatePipeline(destFormat);
-
-        GraphicsContext.ResourceTracking.TransitionTexture(
-            commandList,
-            source,
-            (uint)ResourceUsageFlagBits.ShaderResource,
-            QueueType.Graphics);
-
-        GraphicsContext.ResourceTracking.TransitionTexture(
-            commandList,
-            dest,
-            (uint)ResourceUsageFlagBits.RenderTarget,
-            QueueType.Graphics);
-
         UpdateBindGroup(frameIndex, source);
 
-        _rtAttachment[0] = new RenderingAttachmentDesc
-        {
-            Resource = dest,
-            LoadOp = LoadOp.Load,
-            StoreOp = StoreOp.Store
-        };
-
-        var renderingDesc = new RenderingDesc
-        {
-            RTAttachments = RenderingAttachmentDescArray.FromPinned(_rtAttachment.Handle, 1),
-            NumLayers = 1
-        };
-
-        commandList.BeginRendering(renderingDesc);
-        commandList.BindViewport(0, 0, width, height);
-        commandList.BindScissorRect(0, 0, width, height);
-        commandList.BindPipeline(pipeline);
-        commandList.BindGroup(_bindGroups[frameIndex]);
-        commandList.Draw(3, 1, 0, 0);
-        commandList.EndRendering();
+        pass.SetRenderTarget(0, dest, LoadOp.Load);
+        pass.Begin();
+        pass.TransitionTexture(source, (uint)ResourceUsageFlagBits.ShaderResource);
+        pass.BeginRendering();
+        pass.BindPipeline(GetOrCreatePipeline(dest.Format));
+        pass.Bind(_bindGroups[frameIndex]);
+        pass.Draw(3);
+        pass.End();
     }
 
     private Pipeline GetOrCreatePipeline(Format format)
@@ -197,7 +156,6 @@ public class BlitPass : IDisposable
         var bindGroup = _bindGroups[frameIndex];
         bindGroup.BeginUpdate();
         bindGroup.SrvTexture(0, sourceTexture);
-        bindGroup.SrvTexture(1, GraphicsContext.NullTexture);
         bindGroup.Sampler(0, _linearSampler);
         bindGroup.EndUpdate();
 
@@ -206,8 +164,6 @@ public class BlitPass : IDisposable
 
     public void Dispose()
     {
-        _rtAttachment.Dispose();
-
         foreach (var bindGroup in _bindGroups)
         {
             bindGroup.Dispose();

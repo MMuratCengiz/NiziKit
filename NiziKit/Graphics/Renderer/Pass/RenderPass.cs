@@ -74,9 +74,7 @@ public abstract class RenderPass : IDisposable
 
     public void Bind<TBinding>(object target) where TBinding : IShaderBinding, new()
     {
-        var binding = GpuBinding.Get<TBinding>(target);
-        binding.Update(target);
-        Bind(binding);
+        Bind(GpuBinding.Get<TBinding>(target));
     }
 
     public void BindPipeline(Pipeline pipeline)

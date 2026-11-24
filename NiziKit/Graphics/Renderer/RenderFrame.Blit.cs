@@ -9,42 +9,38 @@ public partial class RenderFrame
 {
     private const int MaxBlitPassesPerFrame = 8;
 
-    private readonly BlitPass[] _blitPasses = new BlitPass[MaxBlitPassesPerFrame];
-    private readonly CycledTexture?[] _blitDestinations = new CycledTexture?[MaxBlitPassesPerFrame];
+    private readonly BlitPass?[] _blitPasses = new BlitPass?[MaxBlitPassesPerFrame];
     private int _blitPassIndex;
 
-    public void AlphaBlit(CycledTexture source, CycledTexture dest)
+    public GraphicsPass AlphaBlit(CycledTexture source, CycledTexture dest, params ReadOnlySpan<RenderPass> dependencies)
     {
-        var blitPass = GetOrCreateBlitPass(_blitPassIndex);
-        _blitPassIndex++;
-
-        var pass = AllocateBlitPass();
-        pass.CommandList.Begin();
-        blitPass.Execute(pass.CommandList, source, dest);
-        pass.CommandList.End();
+        return AlphaBlit(source[_currentFrame], dest, null, dependencies);
     }
 
-    /// <summary>
-    /// Alpha-blends <paramref name="source"/> over <paramref name="dest"/>. If <paramref name="waitSemaphore"/> is given,
-    /// the blit waits on it before sampling <paramref name="source"/> (e.g. the semaphore from <c>Ui.EndFrame(dt)</c>).
-    /// </summary>
-    public void AlphaBlit(Texture source, CycledTexture dest, Semaphore? waitSemaphore = null)
+    public GraphicsPass AlphaBlit(Texture source, CycledTexture dest, Semaphore? waitSemaphore = null,
+        params ReadOnlySpan<RenderPass> dependencies)
     {
-        var blitPass = GetOrCreateBlitPass(_blitPassIndex);
-        _blitPassIndex++;
+        if (_blitPassIndex >= MaxBlitPassesPerFrame)
+        {
+            throw new InvalidOperationException($"Too many blits this frame, the limit is {MaxBlitPassesPerFrame}");
+        }
 
-        var pass = AllocateBlitPass();
-        _passes[_passCount - 1].ExternalWaitSemaphore = waitSemaphore;
+        var blitPass = GetOrCreateBlitPass(_blitPassIndex++);
+        var pass = BeginGraphicsPassInternal(-1);
+        var passIndex = _passCount - 1;
+        _passes[passIndex].ExternalWaitSemaphore = waitSemaphore;
+        foreach (var dependency in dependencies)
+        {
+            AddDependency(passIndex, FindPassIndex(dependency));
+        }
 
-        pass.CommandList.Begin();
-        blitPass.Execute(pass.CommandList, source, dest);
-        pass.CommandList.End();
+        blitPass.Execute(pass, source, dest);
+        return pass;
     }
 
     private BlitPass GetOrCreateBlitPass(int index)
     {
-        _blitPasses[index] ??= new BlitPass();
-        return _blitPasses[index];
+        return _blitPasses[index] ??= new BlitPass();
     }
 
     private void ResetBlitPassIndex()
@@ -57,7 +53,6 @@ public partial class RenderFrame
         for (var i = 0; i < MaxBlitPassesPerFrame; i++)
         {
             _blitPasses[i]?.Dispose();
-            _blitDestinations[i]?.Dispose();
         }
     }
 }

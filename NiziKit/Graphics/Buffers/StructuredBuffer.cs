@@ -33,7 +33,7 @@ public sealed class StructuredBuffer<T> : IDisposable where T : unmanaged
         }
     }
 
-    public Buffer this[int index] => _buffers[index];
+    public Buffer this[int index] => _buffers[_cycled ? index : 0];
 
     public Buffer Buffer => _buffers[Index];
     public uint Count { get; }

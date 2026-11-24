@@ -39,5 +39,9 @@ public sealed class ConstantBuffer<T> : IDisposable where T : unmanaged
 
     public void Dispose()
     {
+        foreach (var view in _views)
+        {
+            GraphicsContext.UniformBufferArena.Release(view);
+        }
     }
 }

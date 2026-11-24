@@ -32,7 +32,7 @@ public class PresentPass : IDisposable
                 new ShaderStageDesc
                 {
                     EntryPoint = StringView.Create("PSMain"),
-                    Data = ByteArray.Create(Encoding.UTF8.GetBytes(PassShaders.PresentShader)),
+                    Data = ByteArray.Create(Encoding.UTF8.GetBytes(PassShaders.CopyTexture)),
                     Stage = (uint)ShaderStageFlagBits.Pixel
                 }
             ])

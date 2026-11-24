@@ -6,17 +6,18 @@ public abstract class ShaderBinding<TTarget> : IShaderBinding
 {
     public Type TargetType => typeof(TTarget);
     public BindGroupLayout Layout { get; }
-    public virtual bool RequiresCycling => false;
+    public bool RequiresCycling { get; }
 
-    protected int NumBindGroups => RequiresCycling ? (int)GraphicsContext.NumFrames : 1;
+    protected int NumBindGroups => BindGroups.Length;
     protected BindGroup[] BindGroups { get; }
 
-    public BindGroup BindGroup => RequiresCycling ? BindGroups[GraphicsContext.FrameIndex] : BindGroups[0];
+    public BindGroup BindGroup => BindGroups[RequiresCycling ? GraphicsContext.FrameIndex : 0];
 
-    protected ShaderBinding(BindGroupLayout layout)
+    protected ShaderBinding(BindGroupLayout layout, bool cycled = false)
     {
         Layout = layout ?? throw new ArgumentNullException(nameof(layout));
-        BindGroups = new BindGroup[NumBindGroups];
+        RequiresCycling = cycled;
+        BindGroups = new BindGroup[cycled ? (int)GraphicsContext.NumFrames : 1];
 
         var bindGroupDesc = new BindGroupDesc
         {
@@ -27,12 +28,6 @@ public abstract class ShaderBinding<TTarget> : IShaderBinding
         {
             BindGroups[i] = GraphicsContext.Device.CreateBindGroup(bindGroupDesc);
         }
-
-        OnCreated();
-    }
-
-    protected virtual void OnCreated()
-    {
     }
 
     public void Update(object target)

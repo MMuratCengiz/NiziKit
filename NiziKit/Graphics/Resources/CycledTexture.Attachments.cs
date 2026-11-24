@@ -41,6 +41,8 @@ public partial class CycledTexture
         var isScreenSized = width == 0 && height == 0;
         var desc = Common(name, width, height);
         desc.Format = Format.D24UnormS8Uint;
+        desc.Usage = (uint)TextureUsageFlagBits.RenderAttachment;
+        desc.ClearDepthStencilHint = new Vector2(1.0f, 0.0f);
         return new CycledTexture(desc, isScreenSized);
     }
 

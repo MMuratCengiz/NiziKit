@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using DenOfIz;
 using NiziKit.Graphics.Resources;
 using Semaphore = DenOfIz.Semaphore;
@@ -10,9 +11,10 @@ namespace NiziKit.Graphics.Renderer;
 
 public partial class RenderFrame : IDisposable
 {
-    private const int MaxPassesPerFrame = 32;
+    private const int MaxGraphicsPassesPerFrame = 32;
     private const int MaxComputePassesPerFrame = 8;
     private const int MaxRaytracingPassesPerFrame = 8;
+    private const int MaxPassesPerFrame = MaxGraphicsPassesPerFrame + MaxComputePassesPerFrame + MaxRaytracingPassesPerFrame;
     private const int MaxDependenciesPerPass = 8;
 
     private readonly Fence[] _frameFences;
@@ -43,6 +45,12 @@ public partial class RenderFrame : IDisposable
     
     public int FrameIndex => _currentFrame;
 
+    [InlineArray(MaxDependenciesPerPass)]
+    private struct DependencyList
+    {
+        private int _element0;
+    }
+
     private struct PassData
     {
         public RenderPass Pass;
@@ -50,38 +58,7 @@ public partial class RenderFrame : IDisposable
         public QueueType QueueType;
         public Semaphore? ExternalWaitSemaphore;
         public int DependencyCount;
-        public int Dep0, Dep1, Dep2, Dep3, Dep4, Dep5, Dep6, Dep7;
-
-        public int GetDependency(int index)
-        {
-            return index switch
-            {
-                0 => Dep0,
-                1 => Dep1,
-                2 => Dep2,
-                3 => Dep3,
-                4 => Dep4,
-                5 => Dep5,
-                6 => Dep6,
-                7 => Dep7,
-                _ => -1
-            };
-        }
-
-        public void SetDependency(int index, int value)
-        {
-            switch (index)
-            {
-                case 0: Dep0 = value; break;
-                case 1: Dep1 = value; break;
-                case 2: Dep2 = value; break;
-                case 3: Dep3 = value; break;
-                case 4: Dep4 = value; break;
-                case 5: Dep5 = value; break;
-                case 6: Dep6 = value; break;
-                case 7: Dep7 = value; break;
-            }
-        }
+        public DependencyList Dependencies;
     }
 
     public RenderFrame()
@@ -109,14 +86,14 @@ public partial class RenderFrame : IDisposable
 
         for (var frame = 0; frame < numFrames; frame++)
         {
-            _graphicsPasses[frame] = new GraphicsPass[MaxPassesPerFrame];
-            _graphicsSemaphores[frame] = new Semaphore[MaxPassesPerFrame];
+            _graphicsPasses[frame] = new GraphicsPass[MaxGraphicsPassesPerFrame];
+            _graphicsSemaphores[frame] = new Semaphore[MaxGraphicsPassesPerFrame];
             _computePasses[frame] = new ComputePass[MaxComputePassesPerFrame];
             _computeSemaphores[frame] = new Semaphore[MaxComputePassesPerFrame];
             _raytracingPasses[frame] = new RaytracingPass[MaxRaytracingPassesPerFrame];
             _raytracingSemaphores[frame] = new Semaphore[MaxRaytracingPassesPerFrame];
 
-            for (var i = 0; i < MaxPassesPerFrame; i++)
+            for (var i = 0; i < MaxGraphicsPassesPerFrame; i++)
             {
                 var (gfxCmd, gfxSem) = _commandListAllocator.GetCommandList(QueueType.Graphics, (uint)frame);
                 _graphicsPasses[frame][i] = new GraphicsPass(gfxCmd);
@@ -145,22 +122,11 @@ public partial class RenderFrame : IDisposable
 
         _submitCommandLists = new CommandList[1];
         _submitSignalSemaphores = new Semaphore[1];
-        _submitWaitSemaphores = new Semaphore[MaxDependenciesPerPass + 1];
+        _submitWaitSemaphores = new Semaphore[MaxPassesPerFrame + 1];
     }
 
     public void BeginFrame()
     {
-        if (Metal.IsCapturing(GraphicsContext.Device))
-        {
-            Metal.EndGpuCapture(GraphicsContext.Device);
-        }
-
-        if (InputSystem.GetKeyState(KeyCode.F12) == KeyState.Pressed &&
-            InputSystem.GetKeyState(KeyCode.Lgui) == KeyState.Pressed)
-        {
-            Metal.BeginGpuCapture(GraphicsContext.Device);
-        }
-
         GraphicsContext.BeginFrame();
         _currentFrame = GraphicsContext.FrameIndex;
         _frameFences[_currentFrame].Wait();
@@ -218,92 +184,62 @@ public partial class RenderFrame : IDisposable
         return BeginRaytracingPassInternal(depIndex);
     }
 
-    private GraphicsPass AllocateBlitPass()
-    {
-        var pass = _graphicsPasses[_currentFrame][_graphicsPassCount];
-        var semaphore = _graphicsSemaphores[_currentFrame][_graphicsPassCount];
-        _graphicsPassCount++;
-
-        pass.Reset();
-
-        ref var passData = ref _passes[_passCount];
-        passData.Pass = pass;
-        passData.SignalSemaphore = semaphore;
-        passData.QueueType = QueueType.Graphics;
-        passData.ExternalWaitSemaphore = null;
-        passData.DependencyCount = 0;
-
-        for (var i = 0; i < _passCount && passData.DependencyCount < MaxDependenciesPerPass; i++)
-        {
-            AddDependency(_passCount, i);
-        }
-
-        _passCount++;
-        return pass;
-    }
-
     private GraphicsPass BeginGraphicsPassInternal(int dependencyIndex)
     {
+        if (_graphicsPassCount >= MaxGraphicsPassesPerFrame)
+        {
+            throw new InvalidOperationException(
+                $"Too many graphics passes this frame, the limit is {MaxGraphicsPassesPerFrame} (blits count as graphics passes)");
+        }
+
         var pass = _graphicsPasses[_currentFrame][_graphicsPassCount];
         var semaphore = _graphicsSemaphores[_currentFrame][_graphicsPassCount];
         _graphicsPassCount++;
 
-        pass.Reset();
-
-        ref var passData = ref _passes[_passCount];
-        passData.Pass = pass;
-        passData.SignalSemaphore = semaphore;
-        passData.QueueType = QueueType.Graphics;
-        passData.ExternalWaitSemaphore = null;
-        passData.DependencyCount = 0;
-
-        if (dependencyIndex >= 0)
-        {
-            AddDependency(_passCount, dependencyIndex);
-        }
-
-        _passCount++;
+        RegisterPass(pass, semaphore, QueueType.Graphics, dependencyIndex);
         return pass;
     }
 
     private ComputePass BeginComputePassInternal(int dependencyIndex)
     {
+        if (_computePassCount >= MaxComputePassesPerFrame)
+        {
+            throw new InvalidOperationException($"Too many compute passes this frame, the limit is {MaxComputePassesPerFrame}");
+        }
+
         var pass = _computePasses[_currentFrame][_computePassCount];
         var semaphore = _computeSemaphores[_currentFrame][_computePassCount];
         _computePassCount++;
 
-        pass.Reset();
-
-        ref var passData = ref _passes[_passCount];
-        passData.Pass = pass;
-        passData.SignalSemaphore = semaphore;
-        passData.QueueType = QueueType.Compute;
-        passData.ExternalWaitSemaphore = null;
-        passData.DependencyCount = 0;
-
-        if (dependencyIndex >= 0)
-        {
-            AddDependency(_passCount, dependencyIndex);
-        }
-
-        _passCount++;
+        RegisterPass(pass, semaphore, QueueType.Compute, dependencyIndex);
         return pass;
     }
 
     private RaytracingPass BeginRaytracingPassInternal(int dependencyIndex)
     {
+        if (_raytracingPassCount >= MaxRaytracingPassesPerFrame)
+        {
+            throw new InvalidOperationException($"Too many raytracing passes this frame, the limit is {MaxRaytracingPassesPerFrame}");
+        }
+
         var pass = _raytracingPasses[_currentFrame][_raytracingPassCount];
         var semaphore = _raytracingSemaphores[_currentFrame][_raytracingPassCount];
         _raytracingPassCount++;
 
+        RegisterPass(pass, semaphore, QueueType.Graphics, dependencyIndex);
+        return pass;
+    }
+
+    private void RegisterPass(RenderPass pass, Semaphore semaphore, QueueType queueType, int dependencyIndex)
+    {
         pass.Reset();
 
-        ref var passData = ref _passes[_passCount];
-        passData.Pass = pass;
-        passData.SignalSemaphore = semaphore;
-        passData.QueueType = QueueType.Graphics;
-        passData.ExternalWaitSemaphore = null;
-        passData.DependencyCount = 0;
+        _passes[_passCount] = new PassData
+        {
+            Pass = pass,
+            SignalSemaphore = semaphore,
+            QueueType = queueType
+        };
 
         if (dependencyIndex >= 0)
         {
@@ -311,7 +247,6 @@ public partial class RenderFrame : IDisposable
         }
 
         _passCount++;
-        return pass;
     }
 
     private void AddDependency(int passIndex, int dependencyIndex)
@@ -322,7 +257,7 @@ public partial class RenderFrame : IDisposable
             throw new InvalidOperationException("Too many dependencies for pass");
         }
 
-        passData.SetDependency(passData.DependencyCount++, dependencyIndex);
+        passData.Dependencies[passData.DependencyCount++] = dependencyIndex;
     }
 
     private int FindPassIndex(RenderPass pass)
@@ -350,8 +285,7 @@ public partial class RenderFrame : IDisposable
             var waitCount = 0;
             for (var j = 0; j < passData.DependencyCount; j++)
             {
-                var depIndex = passData.GetDependency(j);
-                _submitWaitSemaphores[waitCount++] = _passes[depIndex].SignalSemaphore;
+                _submitWaitSemaphores[waitCount++] = _passes[passData.Dependencies[j]].SignalSemaphore;
             }
 
             if (passData.ExternalWaitSemaphore != null)
@@ -382,7 +316,7 @@ public partial class RenderFrame : IDisposable
         _submitSignalSemaphores[0] = semaphore;
 
         var waitCount = 0;
-        for (var i = 0; i < _passCount && waitCount < MaxDependenciesPerPass; i++)
+        for (var i = 0; i < _passCount; i++)
         {
             _submitWaitSemaphores[waitCount++] = _passes[i].SignalSemaphore;
         }
@@ -411,7 +345,7 @@ public partial class RenderFrame : IDisposable
         var numFrames = (int)GraphicsContext.NumFrames;
         for (var frame = 0; frame < numFrames; frame++)
         {
-            for (var i = 0; i < MaxPassesPerFrame; i++)
+            for (var i = 0; i < MaxGraphicsPassesPerFrame; i++)
             {
                 _graphicsPasses[frame][i].Dispose();
             }
