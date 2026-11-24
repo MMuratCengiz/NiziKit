@@ -24,7 +24,7 @@ public class GraphicsPass(CommandList commandList) : RenderPass(commandList)
     private bool _hasStencil;
 
     private Texture? _transitionToPresent;
-    private readonly List<Texture> _sampledTextures = [];
+    private bool _isRendering;
 
     private float _viewportX;
     private float _viewportY;
@@ -142,13 +142,6 @@ public class GraphicsPass(CommandList commandList) : RenderPass(commandList)
         _hasStencil = true;
     }
 
-    public void SampleTexture(CycledTexture texture) => SampleTexture(texture[GraphicsContext.FrameIndex]);
-
-    public void SampleTexture(Texture texture)
-    {
-        _sampledTextures.Add(texture);
-    }
-
     public void SetViewport(float x, float y, float width, float height)
     {
         _viewportX = x;
@@ -179,22 +172,23 @@ public class GraphicsPass(CommandList commandList) : RenderPass(commandList)
         _hasViewport = false;
         _hasScissor = false;
         _transitionToPresent = null;
-        _sampledTextures.Clear();
+        _isRendering = false;
         _numLayers = 1;
         Array.Clear(_rtTextures);
         _depthTexture = null;
         _stencilTexture = null;
     }
 
-    protected override void BeginInternal()
+    public void BeginRendering()
     {
-        foreach (var sampled in _sampledTextures)
+        if (!_isRecording)
         {
-            GraphicsContext.ResourceTracking.TransitionTexture(
-                _commandList,
-                sampled,
-                (uint)ResourceUsageFlagBits.ShaderResource,
-                QueueType.Graphics);
+            throw new InvalidOperationException("Call Begin() before BeginRendering()");
+        }
+
+        if (_isRendering)
+        {
+            throw new InvalidOperationException("Pass is already rendering");
         }
 
         for (var i = 0; i < _rtCount; i++)
@@ -269,11 +263,27 @@ public class GraphicsPass(CommandList commandList) : RenderPass(commandList)
         {
             _commandList.BindScissorRect(0, 0, defaultWidth, defaultHeight);
         }
+
+        _isRendering = true;
+    }
+
+    public void EndRendering()
+    {
+        if (!_isRendering)
+        {
+            throw new InvalidOperationException("Pass is not rendering");
+        }
+
+        _commandList.EndRendering();
+        _isRendering = false;
     }
 
     protected override void EndInternal()
     {
-        _commandList.EndRendering();
+        if (_isRendering)
+        {
+            EndRendering();
+        }
 
         if (_transitionToPresent != null)
         {
@@ -307,27 +317,40 @@ public class GraphicsPass(CommandList commandList) : RenderPass(commandList)
 
     public void Draw(uint vertexCount, uint instanceCount = 1, uint firstVertex = 0, uint firstInstance = 0)
     {
+        EnsureRendering();
         _commandList.Draw(vertexCount, instanceCount, firstVertex, firstInstance);
     }
 
     public void DrawIndexed(uint indexCount, uint instanceCount = 1, uint firstIndex = 0, uint vertexOffset = 0, uint firstInstance = 0)
     {
+        EnsureRendering();
         _commandList.DrawIndexed(indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
     }
 
     public void DrawIndirect(DenOfIz.Buffer buffer, ulong offset, uint drawCount, uint stride)
     {
+        EnsureRendering();
         _commandList.DrawIndirect(buffer, offset, drawCount, stride);
     }
 
     public void DrawIndexedIndirect(DenOfIz.Buffer buffer, ulong offset, uint drawCount, uint stride)
     {
+        EnsureRendering();
         _commandList.DrawIndexedIndirect(buffer, offset, drawCount, stride);
     }
 
     public void DispatchMesh(uint groupCountX, uint groupCountY, uint groupCountZ)
     {
+        EnsureRendering();
         _commandList.DispatchMesh(groupCountX, groupCountY, groupCountZ);
+    }
+
+    private void EnsureRendering()
+    {
+        if (!_isRendering)
+        {
+            throw new InvalidOperationException("Call BeginRendering() before drawing");
+        }
     }
 
     public override void Dispose()
