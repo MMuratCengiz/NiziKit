@@ -1,3 +1,5 @@
 <Solution>
   <Project Path="NiziKit/NiziKit.csproj" />
+  <Project Path="Samples/UIGallery/UIGallery.csproj" />
+  <Project Path="Samples/VttDemo/VttDemo.csproj" />
 </Solution>

@@ -1,228 +1,405 @@
 using System.Numerics;
-using System.Runtime.CompilerServices;
 using DenOfIz;
 using NiziKit.Graphics;
 using NiziKit.UI.Widgets;
+using DzUI = DenOfIz.UI;
 using Semaphore = DenOfIz.Semaphore;
 
 namespace NiziKit.UI;
 
-/// <summary>
-/// Thin immediate-mode facade over the DenOfIz Clay UI library.
-/// Call <see cref="Initialize"/> from Game.Load, forward events via <see cref="HandleEvent"/>,
-/// then per frame: <see cref="BeginFrame"/>, declare elements, <see cref="EndFrame"/>
-/// (inside an active render pass).
-/// </summary>
 public static partial class Ui
 {
-    private static Clay? _clay;
-    private static readonly Dictionary<string, uint> IdCache = new();
+    private const float TooltipOffset = 6;
 
-    public static Clay Clay => _clay ?? throw new InvalidOperationException("Ui not initialized. Call Ui.Initialize() from Game.Load.");
+    private static DzUI? _ui;
+    private static uint _nextWidgetId;
+    private static uint _activateId;
+    private static uint _tooltipId;
+    private static uint _tooltipTarget;
+    private static uint _tooltipOffer;
+    private static float _tooltipTime;
+    private static char[] _tooltipText = new char[128];
+    private static int _tooltipLength;
+    private static int _focusables;
+    private static int _frameFocusables;
+    private static Widget? _focusedWidget;
+    private static Widget? _frameFocusedWidget;
+    private static SystemCursor _cursor;
+    private static bool _textInputActive;
+    private static float _scale = 1;
 
-    /// <summary>
-    /// True if the pointer was over any pointer-capturing element in the last declared frame.
-    /// Published at <see cref="EndFrame"/>; read it in Update (standard imgui pattern).
-    /// </summary>
-    public static bool IsPointerOverUi { get; internal set; }
+    internal static readonly List<Popup> OpenPopups = new();
+    internal static Popup? BuildingPopup;
 
-    private static float _displayScale = 1f;
-    private static float _scale = 1f;
+    public static DzUI Native => _ui ?? throw new InvalidOperationException("Ui is not initialized; it is created with the GraphicsContext of a window.");
 
-    public static float DisplayScale => _displayScale;
+    internal static bool IsInitialized => _ui != null;
+
+    public static Theme Theme { get; set; } = Theme.Dark();
+
+    public static float Time { get; private set; }
+
+    public static float DeltaTime { get; private set; }
+
+    public static bool FocusVisible { get; private set; }
+
+    public static float TooltipDelay { get; set; } = 0.5f;
 
     public static float Scale
     {
         get => _scale;
         set
         {
-            _scale = value > 0f ? value : 1f;
-            ApplyScale();
+            _scale = value > 0 ? value : 1;
+            _ui?.SetScale(_scale);
         }
     }
 
-    internal static void SetDisplayScale(float displayScale)
-    {
-        if (displayScale <= 0f || displayScale == _displayScale)
-        {
-            return;
-        }
+    public static float PixelsPerPoint => Native.PixelsPerPoint;
 
-        _displayScale = displayScale;
-        ApplyScale();
+    public static Vector2 ViewportSize => Native.ViewportSize;
+
+    public static UIDebugFlagBits DebugFlags
+    {
+        set => Native.SetDebugFlags(value);
     }
 
-    private static void ApplyScale()
+    public static bool IsPointerOverUi => _ui != null && _ui.IsPointerOverUI;
+
+    public static uint HoveredId => _ui?.HoveredId ?? 0;
+
+    public static Vector2 PointerPosition => Native.PointerPosition;
+
+    public static uint Focus
     {
-        _clay?.SetDisplayScale(_displayScale * _scale);
+        get => _ui?.Focus ?? 0;
+        set => Native.Focus = value;
     }
+
+    public static Widget? FocusedWidget => _focusedWidget;
+
+    public static bool WantsTextInput => _textInputActive;
 
     public static void Initialize()
     {
-        if (_clay != null)
+        if (_ui != null)
         {
             return;
         }
 
-        _clay = new Clay(new ClayDesc
+        _ui = new DzUI(new UIDesc
         {
             LogicalDevice = GraphicsContext.Device,
             ResourceTracking = GraphicsContext.ResourceTracking,
+            Window = GraphicsContext.Window,
             RenderTargetFormat = GraphicsContext.BackBufferFormat,
             NumFrames = GraphicsContext.NumFrames,
             Width = GraphicsContext.Width,
-            Height = GraphicsContext.Height,
-            MaxNumElements = 8192,
-            MaxNumTextMeasureCacheElements = 16384,
-            MaxNumFonts = 16,
-            Window = GraphicsContext.Window
+            Height = GraphicsContext.Height
         });
-        _clay.SetViewportSize(GraphicsContext.Width, GraphicsContext.Height);
-        var displayScale = GraphicsContext.Window.GetDisplayScale();
-        _displayScale = displayScale > 0f ? displayScale : 1f;
-        ApplyScale();
-        GraphicsContext.OnResize += HandleResize;
+        _ui.SetScale(_scale);
+        _tooltipId = Id("NiziKit.Tooltip");
         FontAwesome.TryInitialize();
     }
 
     public static void Shutdown()
     {
-        if (_clay == null)
+        if (_ui == null)
         {
             return;
         }
 
-        GraphicsContext.OnResize -= HandleResize;
-        GraphicsContext.WaitIdle();
+        if (_textInputActive)
+        {
+            InputSystem.StopTextInput();
+            _textInputActive = false;
+        }
+
+        OpenPopups.Clear();
+        _focusedWidget = null;
+        _frameFocusedWidget = null;
+        _ui.Dispose();
+        _ui = null;
         FontAwesome.Shutdown();
         Fonts.Shutdown();
-        Widgets.Text.Clear();
-        _clay.Dispose();
-        _clay = null;
-        IdCache.Clear();
     }
 
-    public static void HandleEvent(ref Event ev)
+    public static bool HandleEvent(in Event ev)
     {
-        HandleWidgetEvent(ref ev);
+        if (_ui == null)
+        {
+            return false;
+        }
 
-        if (ev is { Type: EventType.WindowEvent, Window.Event: WindowEventType.PixelSizeChanged })
+        _ui.HandleEvent(in ev);
+        switch (ev.Type)
+        {
+            case EventType.MouseButtonDown:
+                FocusVisible = false;
+                return false;
+            case EventType.KeyDown:
+                return HandleKeyDown(in ev.Key);
+            case EventType.TextInput:
+                return HandleTextInput(ev.Text.Text);
+            default:
+                return false;
+        }
+    }
+
+    public static void BeginFrame(float deltaTime)
+    {
+        Native.BeginFrame(deltaTime);
+        Fonts.ReleaseRemoved();
+        DeltaTime = deltaTime;
+        Time += deltaTime;
+        _frameFocusedWidget = null;
+        _frameFocusables = 0;
+        _tooltipOffer = 0;
+    }
+
+    public static void EndFrame()
+    {
+        var ui = Native;
+        DeclarePopups(null);
+        DeclareTooltip();
+        ui.EndFrame();
+
+        _activateId = 0;
+        _focusedWidget = _frameFocusedWidget;
+        _focusables = _frameFocusables;
+
+        var wantsText = _focusedWidget is { AcceptsTextInput: true };
+        if (wantsText != _textInputActive)
+        {
+            _textInputActive = wantsText;
+            if (wantsText)
+            {
+                InputSystem.StartTextInput();
+            }
+            else
+            {
+                InputSystem.StopTextInput();
+            }
+        }
+
+        if (ui.Cursor != _cursor)
+        {
+            _cursor = ui.Cursor;
+            InputSystem.SetCursor(_cursor);
+        }
+    }
+
+    public static void Render(CommandList commandList)
+    {
+        Native.Render((uint)GraphicsContext.FrameIndex, commandList);
+    }
+
+    public static (Texture Texture, Semaphore Semaphore) RenderToTexture(ReadOnlySpan<Semaphore> waitSemaphores = default)
+    {
+        return Native.RenderToTexture((uint)GraphicsContext.FrameIndex, waitSemaphores);
+    }
+
+    public static void Draw(Widget widget)
+    {
+        widget.Build();
+    }
+
+    public static uint Id(ReadOnlySpan<char> name, uint seed = 0)
+    {
+        return DzUI.HashId(name, seed);
+    }
+
+    public static uint Id(uint parent, uint value)
+    {
+        return DzUI.CombineId(parent, value);
+    }
+
+    internal static uint NewWidgetId()
+    {
+        return DzUI.CombineId(0x4E5A4B57u, ++_nextWidgetId);
+    }
+
+    public static UIInteraction Interaction(uint id)
+    {
+        return Native.GetInteraction(id);
+    }
+
+    public static bool Activated(uint id, in UIInteraction interaction)
+    {
+        return interaction.Clicked || (_activateId != 0 && _activateId == id);
+    }
+
+    public static bool TryGetRect(uint id, out UIRect rect)
+    {
+        return Native.TryGetElementRect(id, out rect);
+    }
+
+    public static void FocusNext(bool reverse = false)
+    {
+        Native.FocusNext(reverse);
+    }
+
+    public static bool TryGetScroll(uint id, out UIScrollState state)
+    {
+        return Native.TryGetScrollState(id, out state);
+    }
+
+    public static void ScrollTo(uint id, Vector2 offset)
+    {
+        Native.SetScrollOffset(id, offset);
+    }
+
+    public static void ScrollToEnd(uint id)
+    {
+        var x = TryGetScroll(id, out var state) ? state.Offset.X : 0;
+        Native.SetScrollOffset(id, new Vector2(x, float.MaxValue));
+    }
+
+    public static void ScrollIntoView(uint id)
+    {
+        Native.ScrollIntoView(id);
+    }
+
+    public static void Tooltip(uint targetId, ReadOnlySpan<char> text)
+    {
+        if (targetId == 0 || text.IsEmpty)
         {
             return;
         }
 
-        Clay.HandleEvent(in ev);
-    }
-
-    public static void BeginFrame(float dt)
-    {
-        BeginInput(dt);
-        Clay.UpdateScrollContainers(false, Vector2.Zero, dt);
-        Clay.BeginLayout();
-    }
-
-    /// <summary>Ends the layout and records the UI draw into <paramref name="commandList"/> (must be inside an active render pass).</summary>
-    public static void EndFrame(float dt, CommandList commandList)
-    {
-        Clay.EndLayout((uint)GraphicsContext.FrameIndex, dt, commandList);
-        EndInput();
-    }
-
-    /// <summary>
-    /// Ends the layout and renders the UI into Clay's own off-screen target. Returns the UI texture
-    /// (transparent where nothing was drawn) and the semaphore to wait on before sampling it —
-    /// pass both to <c>RenderFrame.AlphaBlit</c> to composite it over the scene.
-    /// Returns <c>null</c> when the layout produced no render commands (Clay renders nothing and hands back null handles).
-    /// </summary>
-    public static (Texture Texture, Semaphore Semaphore)? EndFrame(float dt)
-    {
-        var (texture, semaphore) = Clay.EndAndRenderLayout((uint)GraphicsContext.FrameIndex, dt);
-        EndInput();
-        if ((ulong)texture == 0 || (ulong)semaphore == 0)
+        if (_tooltipText.Length < text.Length)
         {
-            return null;
+            _tooltipText = new char[Math.Max(text.Length, _tooltipText.Length * 2)];
         }
 
-        return (texture, semaphore);
+        text.CopyTo(_tooltipText);
+        _tooltipLength = text.Length;
+        _tooltipOffer = targetId;
     }
 
-    [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "_cachedTextures")]
-    private static extern ref Texture?[]? CachedRenderTargets(Clay clay);
-
-    private static void HandleResize(uint width, uint height)
+    internal static void TrackFocused(Widget widget)
     {
-        if (_clay == null)
+        _frameFocusedWidget = widget;
+    }
+
+    internal static void CountFocusable()
+    {
+        _frameFocusables++;
+    }
+
+    internal static void DeclarePopups(Popup? layer)
+    {
+        for (var i = 0; i < OpenPopups.Count; i++)
+        {
+            var popup = OpenPopups[i];
+            if (popup.ParentPopup != layer)
+            {
+                continue;
+            }
+
+            popup.ZIndex = 100 + i;
+            popup.Build();
+            if (i >= OpenPopups.Count || !ReferenceEquals(OpenPopups[i], popup))
+            {
+                i--;
+            }
+        }
+    }
+
+    internal static Popup? TopmostPopup => OpenPopups.Count > 0 ? OpenPopups[^1] : null;
+
+    private static void DeclareTooltip()
+    {
+        if (_tooltipOffer != _tooltipTarget)
+        {
+            _tooltipTarget = _tooltipOffer;
+            _tooltipTime = 0;
+        }
+        else if (_tooltipTarget != 0)
+        {
+            _tooltipTime += DeltaTime;
+        }
+
+        if (_tooltipTarget == 0 || _tooltipTime < TooltipDelay)
         {
             return;
         }
 
-        _clay.SetViewportSize(width, height);
-
-        if (CachedRenderTargets(_clay) is { } renderTargets)
+        var theme = Theme;
+        using (Row(_tooltipId)
+                   .Padding(8, 5)
+                   .MaxWidth(320)
+                   .Background(theme.TooltipBackground)
+                   .CornerRadius(5)
+                   .Passthrough()
+                   .FloatOn(_tooltipTarget, UIAnchor.BottomCenter, UIAnchor.TopCenter, new Vector2(0, TooltipOffset))
+                   .KeepInViewport()
+                   .ZIndex(10000, absolute: true)
+                   .Enter(UITransitionState.FromOpacity(0).WithOffset(new Vector2(0, -4)))
+                   .Exit(UITransitionState.FromOpacity(0))
+                   .Open())
         {
-            Array.Clear(renderTargets);
+            Text(_tooltipText.AsSpan(0, _tooltipLength), theme.SmallFontSize, theme.TooltipText);
         }
     }
 
-    public static Element Element(string? id = null)
+    private static bool HandleKeyDown(in KeyboardEventData key)
     {
-        return new Element(id == null ? 0u : Id(id), ClayLayoutDirection.LeftToRight);
-    }
-
-    public static Element Row(string? id = null)
-    {
-        return Element(id);
-    }
-
-    public static Element Column(string? id = null)
-    {
-        return new Element(id == null ? 0u : Id(id), ClayLayoutDirection.TopToBottom);
-    }
-
-    public static void Text(string text, int fontSize, Color color)
-    {
-        var desc = ClayTextDesc.Default();
-        desc.TextColor = color.ToClay();
-        desc.FontId = 0;
-        desc.FontSize = (ushort)fontSize;
-        desc.WrapMode = ClayTextWrapMode.Words;
-        Widgets.Text.Draw(text, in desc);
-    }
-
-    public static void Spacer()
-    {
-        Element().Grow().OpenClose();
-    }
-
-    public static bool PointerOver(string id)
-    {
-        return PointerOver(Id(id));
-    }
-
-    public static bool Clicked(string id)
-    {
-        return Clay.ElementClicked(Id(id));
-    }
-
-    public static void SetScrollPosition(string id, Vector2 scrollPosition)
-    {
-        Clay.SetScrollPosition(Id(id), scrollPosition);
-    }
-
-    private static uint Id(string name)
-    {
-        if (IdCache.TryGetValue(name, out var id))
+        var popup = TopmostPopup;
+        if (popup != null && popup.OnKeyDown(in key))
         {
-            return id;
+            return true;
         }
 
-        id = Clay.HashString(name, 0, 0);
-        IdCache[name] = id;
-        return id;
+        if (_focusedWidget is { Enabled: true } focused && focused.OnKeyDown(in key))
+        {
+            return true;
+        }
+
+        switch (key.KeyCode)
+        {
+            case KeyCode.Tab when _focusables > 0 || Focus != 0:
+                FocusNext(Keys.Shift(key.Mod));
+                FocusVisible = true;
+                return true;
+            case KeyCode.Escape:
+                if (popup is { CloseOnEscape: true })
+                {
+                    popup.Close();
+                    return true;
+                }
+
+                if (Focus != 0)
+                {
+                    Focus = 0;
+                    return true;
+                }
+
+                return false;
+            case KeyCode.Return:
+            case KeyCode.KeypadEnter:
+            case KeyCode.Space:
+                var focus = Focus;
+                if (focus == 0)
+                {
+                    return false;
+                }
+
+                _activateId = focus;
+                return true;
+            default:
+                return false;
+        }
     }
 
-    private static bool PointerOver(uint id)
+    private static unsafe bool HandleTextInput(StringView text)
     {
-        return Clay.PointerOver(id);
+        if (_focusedWidget is not { AcceptsTextInput: true, Enabled: true } focused || text.Chars == IntPtr.Zero || text.NumChars == 0)
+        {
+            return false;
+        }
+
+        focused.OnTextInput(new ReadOnlySpan<byte>((void*)text.Chars, (int)text.NumChars));
+        return true;
     }
 }

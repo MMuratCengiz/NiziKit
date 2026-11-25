@@ -1,6 +1,6 @@
 using DenOfIz;
 
-namespace NiziKit.UI.Widgets;
+namespace NiziKit.UI;
 
 public static class FontAwesome
 {

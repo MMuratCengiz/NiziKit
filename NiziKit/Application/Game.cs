@@ -189,7 +189,6 @@ public class Game : IDisposable
         }
 
         Window.Refresh();
-        Ui.SetDisplayScale(Window.DisplayScale);
 
         if (StopOnDeviceLost())
         {
@@ -249,7 +248,10 @@ public class Game : IDisposable
                 Window.HandleWindowEvent(ev.Window.Event);
             }
 
-            OnEvent(ref ev);
+            if (!Ui.HandleEvent(in ev))
+            {
+                OnEvent(ref ev);
+            }
         }
     }
 }

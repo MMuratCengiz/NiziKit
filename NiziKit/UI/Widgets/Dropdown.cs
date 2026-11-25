@@ -2,59 +2,32 @@ using DenOfIz;
 
 namespace NiziKit.UI.Widgets;
 
-public class Dropdown : HStack
+public class Dropdown : Widget
 {
-    private readonly Label _label;
-    private readonly Label _caret;
-    private readonly Popup _popup;
+    private readonly DropdownList _list;
     private int _selectedIndex = -1;
 
     public Dropdown()
     {
-        Width = 180;
-        Height = 32;
-        Padding = new Thickness(10, 0);
-        Gap = 8;
-        CornerRadius = 6;
-        Focusable = true;
-        _label = new Label { Wrap = false };
-        _caret = new Label(FontAwesome.CaretDown) { Wrap = false, FontId = FontAwesome.FontId };
-        Children.Add(_label);
-        Children.Add(new Spacer());
-        Children.Add(_caret);
-        _popup = new Popup { Owner = this, Padding = 4, Gap = 2 };
+        ref var layout = ref Desc.Layout;
+        layout.Width = 180;
+        layout.Justify = UIJustify.SpaceBetween;
+        layout.AlignItems = UIAlign.Center;
+        layout.Gap = 8;
+        layout.Padding = UILengthEdges.Symmetric(10, 6);
+        Desc.Style.BorderWidth = UIEdges.All(1);
+        _list = new DropdownList(this);
     }
 
-    public Dropdown(IEnumerable<string> items) : this()
+    public Dropdown(IEnumerable<string> items, int selectedIndex = 0) : this()
     {
         Items.AddRange(items);
+        _selectedIndex = selectedIndex < 0 || Items.Count == 0 ? -1 : Math.Min(selectedIndex, Items.Count - 1);
     }
 
     public List<string> Items { get; } = new();
     public string Placeholder { get; set; } = "Select...";
-    public int FontSize { get; set; } = 14;
-    public ushort FontId { get; set; } = Fonts.DefaultFontId;
     public float MaxListHeight { get; set; } = 240;
-    public float RowHeight { get; set; } = 28;
-
-    /// <summary>Color of the <see cref="Placeholder"/> text. Having no selection is not an interaction state, so it sits outside <see cref="Style"/>.</summary>
-    public Color PlaceholderColor { get; set; } = Color.Rgb(120, 125, 140);
-
-    /// <summary>Color of the caret glyph, which is a sub-element rather than a state of the box.</summary>
-    public Color CaretColor { get; set; } = Color.Rgb(160, 165, 180);
-
-    /// <summary>Theming for the list rows. The selected row resolves through <see cref="Widgets.Style.Checked"/>.</summary>
-    public Style RowStyle { get; set; } = new()
-    {
-        Normal = new StyleState { Text = Color.Rgb(235, 235, 240) },
-        Checked = new StyleState { Background = Color.Rgba(88, 130, 240, 90) },
-        Hover = new StyleState { Background = Color.Rgb(110, 150, 250) },
-        Disabled = new StyleState { Text = Color.Rgb(160, 165, 180) }
-    };
-
-    public Popup Popup => _popup;
-    public Label TextLabel => _label;
-    public Label Caret => _caret;
 
     public int SelectedIndex
     {
@@ -78,61 +51,31 @@ public class Dropdown : HStack
         set => SelectedIndex = value == null ? -1 : Items.IndexOf(value);
     }
 
-    public bool IsOpen => _popup.IsOpen;
-
-    /// <summary>Builds the widget for a row. Rows built here are left entirely to the caller; <see cref="RowStyle"/> only paints the row background.</summary>
-    public Func<string, int, Widget>? ItemTemplate { get; set; }
+    public bool IsOpen => _list.IsOpen;
 
     public event Action<Dropdown>? SelectionChanged;
 
-    protected override bool TracksPointer => true;
-
-    protected internal override bool IsKeyActivatable => true;
+    protected override bool Focusable => true;
 
     public void Open()
     {
-        if (!IsEnabled || Items.Count == 0)
+        if (!Enabled || Items.Count == 0)
         {
             return;
         }
 
-        RebuildRows();
-        var width = Ui.Clay.PixelsToPoints(Bounds.Width);
-        _popup.Width = width > 0 ? Sizing.Fixed(width) : Sizing.Fit;
-        _popup.Height = Sizing.Fit.WithMax(MaxListHeight);
-        _popup.ScrollVertical = Items.Count * (RowHeight + _popup.Gap) > MaxListHeight;
-        _popup.ClipChildren = _popup.ScrollVertical;
-        _popup.Open(this);
+        _list.Highlight = Math.Max(0, _selectedIndex);
+        _list.Reveal = true;
+        _list.Open(this);
     }
 
     public void Close()
     {
-        _popup.Close();
+        _list.Close();
     }
 
-    private void RebuildRows()
+    protected override void OnClick()
     {
-        _popup.Children.Clear();
-        for (var i = 0; i < Items.Count; i++)
-        {
-            _popup.Children.Add(new DropdownRow(this, i));
-        }
-    }
-
-    private void Select(int index)
-    {
-        SelectedIndex = index;
-        Close();
-        Focus();
-    }
-
-    protected override void OnClick(MouseButton button)
-    {
-        if (button != MouseButton.Left)
-        {
-            return;
-        }
-
         if (IsOpen)
         {
             Close();
@@ -145,117 +88,164 @@ public class Dropdown : HStack
 
     protected internal override bool OnKeyDown(in KeyboardEventData key)
     {
-        if (!IsEnabled)
+        if (IsOpen)
         {
-            return false;
+            return _list.OnKeyDown(in key);
         }
 
         switch (key.KeyCode)
         {
             case KeyCode.Up:
-                if (Items.Count > 0)
-                {
-                    SelectedIndex = _selectedIndex <= 0 ? 0 : _selectedIndex - 1;
-                }
-
+                SelectedIndex = Math.Max(0, _selectedIndex - 1);
                 return true;
             case KeyCode.Down:
-                if (Items.Count > 0)
-                {
-                    SelectedIndex = Math.Min(Items.Count - 1, _selectedIndex + 1);
-                }
-
-                return true;
-            case KeyCode.Escape when IsOpen:
-                Close();
+                SelectedIndex = Math.Min(Items.Count - 1, _selectedIndex + 1);
                 return true;
             default:
                 return false;
         }
     }
 
-    protected override void ApplyDeclaration(ref ClayElementDeclaration decl)
+    protected override void OnBuild()
     {
-        base.ApplyDeclaration(ref decl);
-
-        var state = Style.Resolve(this);
-        if (IsOpen)
+        if (IsOpen && (!Visible || !Enabled))
         {
-            state.Layer(in Style.Hover);
-            state.Layer(in Style.Focused);
+            Close();
         }
 
-        state.Apply(ref decl);
+        var theme = Ui.Theme;
+        var open = IsOpen;
+        ref var desc = ref Desc;
+        desc.Cursor = Enabled ? SystemCursor.Pointer : SystemCursor.NotAllowed;
+        desc.Style.BackgroundColor = !Enabled ? theme.Disabled : open || IsHovered ? theme.Hover : theme.Surface;
+        desc.Style.BorderColor = !Enabled ? theme.Disabled : IsFocused && Ui.FocusVisible ? theme.FocusRing : open ? theme.Accent : IsHovered ? theme.BorderStrong : theme.Border;
+        desc.Style.CornerRadius = UICorners.All(theme.CornerRadius);
+        desc.Transition.Duration = theme.TransitionDuration;
+        desc.Transition.Properties = (uint)UITransitionPropertyFlagBits.Colors;
 
-        var selected = SelectedItem;
-        _label.Text = selected ?? Placeholder;
-        _label.FontSize = FontSize;
-        _label.FontId = FontId;
-        _label.Color = selected == null && IsEnabled ? PlaceholderColor : state.Text ?? PlaceholderColor;
-        _caret.FontSize = FontSize;
-        _caret.Color = IsEnabled ? CaretColor : state.Text ?? CaretColor;
-    }
-
-    private sealed class DropdownRow : Widget
-    {
-        private readonly Dropdown _owner;
-        private readonly int _index;
-        private readonly Widget _content;
-        private readonly Label? _label;
-
-        public DropdownRow(Dropdown owner, int index)
+        using (OpenSelf())
         {
-            _owner = owner;
-            _index = index;
-            var item = owner.Items[index];
-            if (owner.ItemTemplate != null)
+            var selected = SelectedItem;
+            var style = Ui.TextStyle(0, !Enabled ? theme.TextDisabled : selected == null ? theme.TextMuted : theme.Text);
+            style.Wrap = UITextWrap.None;
+            style.Overflow = UITextOverflow.Ellipsis;
+            Ui.Text(selected ?? Placeholder, in style);
+
+            var caret = Ui.TextStyle(theme.SmallFontSize, Enabled ? theme.TextMuted : theme.TextDisabled);
+            if (FontAwesome.IsInitialized)
             {
-                _content = owner.ItemTemplate(item, index);
+                caret.FontId = FontAwesome.FontId;
+                Ui.Text(open ? FontAwesome.AngleUp : FontAwesome.AngleDown, in caret);
             }
             else
             {
-                _label = new Label(item) { Wrap = false, FontSize = owner.FontSize, FontId = owner.FontId };
-                _content = _label;
+                Ui.Text(open ? "^" : "v", in caret);
             }
+        }
+    }
 
-            _content.Parent = this;
-            Width = Sizing.Grow;
-            Height = owner.RowHeight;
-            Padding = new Thickness(8, 0);
-            CornerRadius = 4;
+    private void Pick(int index)
+    {
+        SelectedIndex = index;
+        Close();
+    }
+
+    private sealed class DropdownList : Popup
+    {
+        private readonly Dropdown _owner;
+        private readonly List<uint> _rowIds = new();
+
+        public DropdownList(Dropdown owner)
+        {
+            _owner = owner;
+            Layout.Width = UIValue.Percent(1);
+            Layout.Padding = UILengthEdges.All(4);
+            Desc.Scroll.OverflowY = UIOverflow.Scroll;
         }
 
-        protected override bool TracksPointer => true;
+        public int Highlight { get; set; }
+        public bool Reveal { get; set; }
 
-        protected override void OnClick(MouseButton button)
+        protected internal override bool OnKeyDown(in KeyboardEventData key)
         {
-            if (button == MouseButton.Left)
+            var count = _owner.Items.Count;
+            switch (key.KeyCode)
             {
-                _owner.Select(_index);
+                case KeyCode.Up:
+                    Move(Math.Max(0, Highlight - 1));
+                    return true;
+                case KeyCode.Down:
+                    Move(Math.Min(count - 1, Highlight + 1));
+                    return true;
+                case KeyCode.Home:
+                    Move(0);
+                    return true;
+                case KeyCode.End:
+                    Move(count - 1);
+                    return true;
+                case KeyCode.Return:
+                case KeyCode.KeypadEnter:
+                case KeyCode.Space:
+                    _owner.Pick(Highlight);
+                    return true;
+                default:
+                    return false;
             }
         }
 
-        protected override void ApplyDeclaration(ref ClayElementDeclaration decl)
+        protected override void BuildChildren()
         {
-            base.ApplyDeclaration(ref decl);
-            decl.Layout.ChildAlignment.Y = ClayAlignmentY.Center;
-
-            var state = _owner.RowStyle.Resolve(this, _index == _owner.SelectedIndex);
-            state.Apply(ref decl);
-            if (_label != null && state.Text is { } text)
+            var theme = Ui.Theme;
+            var items = _owner.Items;
+            while (_rowIds.Count < items.Count)
             {
-                _label.Color = text;
+                _rowIds.Add(Ui.Id(Id, (uint)_rowIds.Count + 1));
+            }
+
+            Layout.MaxHeight = _owner.MaxListHeight;
+            for (var i = 0; i < items.Count; i++)
+            {
+                var id = _rowIds[i];
+                var interaction = Ui.Interaction(id);
+                if (interaction.HoverStarted)
+                {
+                    Highlight = i;
+                }
+
+                if (interaction.Clicked)
+                {
+                    _owner.Pick(i);
+                }
+
+                var selected = i == _owner.SelectedIndex;
+                var highlighted = i == Highlight;
+                using (Ui.Row(id)
+                           .AlignItems(UIAlign.Center)
+                           .Padding(8, 6)
+                           .Shrink(0)
+                           .CornerRadius(theme.CornerRadius - 2)
+                           .Background(selected ? theme.AccentSoft : highlighted ? theme.Hover : default)
+                           .Cursor(SystemCursor.Pointer)
+                           .Open())
+                {
+                    var style = Ui.TextStyle(0, selected ? theme.Accent : theme.Text);
+                    style.Wrap = UITextWrap.None;
+                    style.Overflow = UITextOverflow.Ellipsis;
+                    Ui.Text(items[i], in style);
+                }
+            }
+
+            if (Reveal && Highlight >= 0 && Highlight < items.Count)
+            {
+                Ui.ScrollIntoView(_rowIds[Highlight]);
+                Reveal = false;
             }
         }
 
-        protected override void CollectChildren(List<Widget> frame)
+        private void Move(int index)
         {
-            _content.CollectFrame(frame);
-        }
-
-        protected override void BuildContent()
-        {
-            _content.Build();
+            Highlight = index;
+            Reveal = true;
         }
     }
 }

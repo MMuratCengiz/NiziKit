@@ -1,61 +1,47 @@
 using System.Globalization;
-using System.Numerics;
 using DenOfIz;
 
 namespace NiziKit.UI.Widgets;
 
 public class Slider : Widget
 {
-    private readonly uint _trackId = Ui.AllocateWidgetId();
-    private bool _dragging;
+    private readonly char[] _valueText = new char[32];
+    private int _valueLength;
+    private float _formattedValue = float.NaN;
+    private uint _trackId;
+    private uint _valueId;
     private float _value;
-    private bool _vertical;
-    private string _valueText = "";
-    private float _valueTextValue = float.NaN;
-    private string? _valueTextFormat;
 
     public Slider()
     {
-        Width = Sizing.Grow;
-        Height = 20;
-        Focusable = true;
+        ref var layout = ref Desc.Layout;
+        layout.Grow = 1;
+        layout.Shrink = 1;
+        layout.Basis = UIValue.Points(0);
+        layout.MinWidth = 60;
+        Desc.Pointer = UIPointerMode.Block;
     }
 
     public Slider(float min, float max, float value) : this()
     {
         Min = min;
         Max = max;
-        _value = Math.Clamp(value, min, max);
+        _value = Math.Clamp(value, Math.Min(min, max), Math.Max(min, max));
     }
 
     public float Min { get; set; }
     public float Max { get; set; } = 1;
-    public float Step { get; init; }
-    public float KnobSize { get; set; } = 14;
-    public float TrackHeight { get; set; } = 4;
-    public SliderStyle Parts { get; set; } = new();
-    public bool ShowValue { get; init; }
-    public string ValueFormat { get; init; } = "0.##";
-    public float ValueWidth { get; set; } = 40;
-    public Color ValueColor { get; set; } = Color.Rgb(160, 165, 180);
-    public Color DisabledValueColor { get; set; } = Color.Rgb(120, 125, 140);
-    public int FontSize { get; set; } = 14;
-    public ushort FontId { get; set; } = Fonts.DefaultFontId;
 
-    public bool Vertical
-    {
-        get => _vertical;
-        set
-        {
-            if (_vertical == value)
-            {
-                return;
-            }
+    public float Step { get; set; }
 
-            _vertical = value;
-            (Width, Height) = (Height, Width);
-        }
-    }
+    public bool Vertical { get; set; }
+    public float KnobSize { get; set; } = 16;
+    public float TrackThickness { get; set; } = 6;
+
+    public bool ShowValue { get; set; }
+
+    public string ValueFormat { get; set; } = "0.##";
+    public float ValueWidth { get; set; } = 44;
 
     public float Value
     {
@@ -63,7 +49,7 @@ public class Slider : Widget
         set
         {
             var clamped = Math.Clamp(Snap(value), Math.Min(Min, Max), Math.Max(Min, Max));
-            if (Math.Abs(clamped - _value) < float.Epsilon)
+            if (clamped == _value)
             {
                 return;
             }
@@ -73,94 +59,30 @@ public class Slider : Widget
         }
     }
 
-    public float Normalized => Max - Min == 0 ? 0 : (_value - Min) / (Max - Min);
-
-    public new bool IsDragging => _dragging;
+    public float Normalized => Max == Min ? 0 : Math.Clamp((_value - Min) / (Max - Min), 0, 1);
 
     public event Action<Slider>? ValueChanged;
 
-    protected override bool TracksPointer => true;
-
-    private float KeyStep => Step > 0 ? Step : (Max - Min) / 100f;
-
-    private string ValueText
-    {
-        get
-        {
-            if (_valueTextValue != _value || _valueTextFormat != ValueFormat)
-            {
-                _valueTextValue = _value;
-                _valueTextFormat = ValueFormat;
-                _valueText = _value.ToString(ValueFormat, CultureInfo.InvariantCulture);
-            }
-
-            return _valueText;
-        }
-    }
-
-    private float Snap(float value)
-    {
-        if (Step <= 0)
-        {
-            return value;
-        }
-
-        return Min + MathF.Round((value - Min) / Step) * Step;
-    }
-
-    protected override void OnPoll()
-    {
-        if (Ui.PointerPressedThisFrame && IsHovered && IsEnabled)
-        {
-            _dragging = true;
-        }
-
-        if (_dragging)
-        {
-            var track = Ui.Clay.GetElementBoundingBox(_trackId);
-            var knob = Ui.Clay.PointsToPixels(KnobSize);
-            if (_vertical)
-            {
-                var usable = track.Height - knob;
-                if (usable > 0)
-                {
-                    var t = 1 - Math.Clamp((Ui.PointerPosition.Y - track.Y - knob * 0.5f) / usable, 0, 1);
-                    Value = Min + t * (Max - Min);
-                }
-            }
-            else
-            {
-                var usable = track.Width - knob;
-                if (usable > 0)
-                {
-                    var t = Math.Clamp((Ui.PointerPosition.X - track.X - knob * 0.5f) / usable, 0, 1);
-                    Value = Min + t * (Max - Min);
-                }
-            }
-        }
-
-        if (Ui.PointerReleasedThisFrame || !Ui.PointerDown)
-        {
-            _dragging = false;
-        }
-    }
+    protected override bool Focusable => true;
 
     protected internal override bool OnKeyDown(in KeyboardEventData key)
     {
-        if (!IsEnabled)
-        {
-            return false;
-        }
-
+        var step = Step > 0 ? Step : (Max - Min) / 100;
         switch (key.KeyCode)
         {
             case KeyCode.Left:
             case KeyCode.Down:
-                Value -= KeyStep;
+                Value -= step;
                 return true;
             case KeyCode.Right:
             case KeyCode.Up:
-                Value += KeyStep;
+                Value += step;
+                return true;
+            case KeyCode.Pagedown:
+                Value -= step * 10;
+                return true;
+            case KeyCode.Pageup:
+                Value += step * 10;
                 return true;
             case KeyCode.Home:
                 Value = Min;
@@ -173,118 +95,130 @@ public class Slider : Widget
         }
     }
 
-    protected override void ApplyDeclaration(ref ClayElementDeclaration decl)
+    protected override void OnBuild()
     {
-        base.ApplyDeclaration(ref decl);
-        decl.Layout.ChildGap = 8;
-        if (_vertical)
+        if (_trackId == 0)
         {
-            decl.Layout.LayoutDirection = ClayLayoutDirection.TopToBottom;
-            decl.Layout.ChildAlignment.X = ClayAlignmentX.Center;
+            _trackId = Ui.Id(Id, 2);
+            _valueId = Ui.Id(Id, 1);
         }
-        else
+
+        ref readonly var interaction = ref Interaction;
+        var knob = KnobSize;
+        if (interaction.Pressed && Enabled)
         {
-            decl.Layout.ChildAlignment.Y = ClayAlignmentY.Center;
+            var track = Ui.Interaction(_trackId);
+            var length = Vertical ? track.Rect.Height : track.Rect.Width;
+            if (track.Pressed && length > knob)
+            {
+                var along = Vertical ? length - track.PointerPosition.Y : track.PointerPosition.X;
+                Value = Min + Math.Clamp((along - knob * 0.5f) / (length - knob), 0, 1) * (Max - Min);
+            }
+        }
+
+        var theme = Ui.Theme;
+        var t = Normalized;
+        var active = interaction.Pressed || IsHovered;
+        var focusRing = IsFocused && Ui.FocusVisible;
+        var thickness = TrackThickness;
+
+        ref var desc = ref Desc;
+        desc.Layout.Direction = Vertical ? UIDirection.Column : UIDirection.Row;
+        desc.Layout.AlignItems = UIAlign.Center;
+        desc.Layout.Gap = 10;
+        desc.Cursor = !Enabled ? SystemCursor.NotAllowed : interaction.Pressed ? Vertical ? SystemCursor.NsResize : SystemCursor.EwResize : SystemCursor.Pointer;
+
+        using (OpenSelf())
+        {
+            var track = Ui.Element(_trackId)
+                .Direction(Vertical ? UIDirection.Column : UIDirection.Row)
+                .Fill()
+                .AlignSelf(UIAlignSelf.Stretch)
+                .Justify(Vertical ? UIJustify.End : UIJustify.Start);
+            if (Vertical)
+            {
+                track.Width(knob).Padding(0, knob * 0.5f).MinHeight(knob * 2);
+            }
+            else
+            {
+                track.Height(knob).Padding(knob * 0.5f, 0).MinWidth(knob * 2);
+            }
+
+            using (track.AlignItems(UIAlign.Center).Open())
+            {
+                var rail = Ui.Element()
+                    .Direction(Vertical ? UIDirection.ColumnReverse : UIDirection.Row)
+                    .Fill()
+                    .Background(theme.Border)
+                    .CornerRadius(thickness * 0.5f);
+                if (Vertical)
+                {
+                    rail.Width(thickness);
+                }
+                else
+                {
+                    rail.Height(thickness);
+                }
+
+                using (rail.Open())
+                {
+                    var fill = Ui.Element()
+                        .Background(Enabled ? theme.Accent : theme.TextDisabled)
+                        .CornerRadius(thickness * 0.5f);
+                    if (Vertical)
+                    {
+                        fill.Height(UIValue.Percent(t));
+                    }
+                    else
+                    {
+                        fill.Width(UIValue.Percent(t));
+                    }
+
+                    fill.Leaf();
+
+                    var thumb = Ui.Element()
+                        .Size(knob, knob)
+                        .Background(interaction.Pressed ? theme.Accent : theme.Surface)
+                        .Border(!Enabled ? theme.TextDisabled : focusRing ? theme.FocusRing : active ? theme.AccentHover : theme.Accent, 2)
+                        .CornerRadius(knob * 0.5f)
+                        .Animate();
+                    if (Vertical)
+                    {
+                        thumb.Absolute(left: (thickness - knob) * 0.5f, bottom: UIValue.Percent(t)).Margin(bottom: -knob * 0.5f);
+                    }
+                    else
+                    {
+                        thumb.Absolute(left: UIValue.Percent(t), top: (thickness - knob) * 0.5f).Margin(left: -knob * 0.5f);
+                    }
+
+                    thumb.Leaf();
+                }
+            }
+
+            if (ShowValue)
+            {
+                FormatValue();
+                using (Ui.Row(_valueId).Width(ValueWidth).Shrink(0).Open())
+                {
+                    Ui.Text(_valueText.AsSpan(0, _valueLength), theme.FontSize, Enabled ? theme.TextMuted : theme.TextDisabled);
+                }
+            }
         }
     }
 
-    protected override void BuildContent()
+    private void FormatValue()
     {
-        var style = Parts;
-        var bounds = Ui.Clay.GetElementBoundingBox(_trackId);
-        var trackLength = Ui.Clay.PixelsToPoints(_vertical ? bounds.Height : bounds.Width);
-        var offset = KnobSize * 0.5f + Normalized * MathF.Max(0, trackLength - KnobSize);
-        var active = _dragging || IsHovered || IsFocused;
-
-        var track = ClayElementDeclaration.Default();
-        track.Id = _trackId;
-        if (_vertical)
-        {
-            track.Layout.Sizing.Width = ClaySizingAxis.Fixed(TrackHeight);
-            track.Layout.Sizing.Height = ClaySizingAxis.Grow(0, float.MaxValue);
-            track.Layout.LayoutDirection = ClayLayoutDirection.TopToBottom;
-            track.Layout.ChildAlignment.X = ClayAlignmentX.Center;
-            track.Layout.ChildAlignment.Y = ClayAlignmentY.Bottom;
-        }
-        else
-        {
-            track.Layout.Sizing.Width = ClaySizingAxis.Grow(0, float.MaxValue);
-            track.Layout.Sizing.Height = ClaySizingAxis.Fixed(TrackHeight);
-            track.Layout.ChildAlignment.Y = ClayAlignmentY.Center;
-        }
-
-        track.BackgroundColor = style.Track.ToClay();
-        track.BorderRadius = ClayBorderRadius.CreateUniform(TrackHeight * 0.5f);
-        Ui.Clay.OpenElement(in track);
-        {
-            var fill = ClayElementDeclaration.Default();
-            if (_vertical)
-            {
-                fill.Layout.Sizing.Width = ClaySizingAxis.Grow(0, float.MaxValue);
-                fill.Layout.Sizing.Height = ClaySizingAxis.Fixed(offset);
-            }
-            else
-            {
-                fill.Layout.Sizing.Width = ClaySizingAxis.Fixed(offset);
-                fill.Layout.Sizing.Height = ClaySizingAxis.Grow(0, float.MaxValue);
-            }
-
-            fill.BackgroundColor = (IsEnabled ? style.Fill : style.FillDisabled).ToClay();
-            fill.BorderRadius = ClayBorderRadius.CreateUniform(TrackHeight * 0.5f);
-            Ui.Clay.OpenElement(in fill);
-            Ui.Clay.CloseElement();
-
-            var knob = ClayElementDeclaration.Default();
-            knob.Layout.Sizing.Width = ClaySizingAxis.Fixed(KnobSize);
-            knob.Layout.Sizing.Height = ClaySizingAxis.Fixed(KnobSize);
-            knob.BackgroundColor = (active ? style.KnobHover : style.Knob).ToClay();
-            knob.BorderRadius = ClayBorderRadius.CreateUniform(KnobSize * 0.5f);
-            if (IsFocused)
-            {
-                knob.Border.Color = style.Focus.ToClay();
-                knob.Border.Width = ClayBorderWidth.CreateUniform(2);
-            }
-
-            knob.Floating.AttachTo = ClayFloatingAttachTo.Parent;
-
-            knob.Floating.ZIndex = Ui.FloatingZIndex;
-            knob.Floating.ElementAttachPoint = ClayFloatingAttachPoint.CenterCenter;
-            if (_vertical)
-            {
-                knob.Floating.ParentAttachPoint = ClayFloatingAttachPoint.CenterBottom;
-                knob.Floating.Offset = new Vector2(0, -offset);
-            }
-            else
-            {
-                knob.Floating.ParentAttachPoint = ClayFloatingAttachPoint.LeftCenter;
-                knob.Floating.Offset = new Vector2(offset, 0);
-            }
-
-            knob.Floating.PointerCaptureMode = ClayPointerCaptureMode.Passthrough;
-            Ui.Clay.OpenElement(in knob);
-            Ui.Clay.CloseElement();
-        }
-        Ui.Clay.CloseElement();
-
-        if (!ShowValue)
+        if (_formattedValue.Equals(_value))
         {
             return;
         }
 
-        var label = ClayElementDeclaration.Default();
-        label.Layout.Sizing.Width = ValueWidth > 0 ? ClaySizingAxis.Fixed(ValueWidth) : ClaySizingAxis.Fit(0, float.MaxValue);
-        label.Layout.Sizing.Height = ClaySizingAxis.Fit(0, float.MaxValue);
-        label.Layout.ChildAlignment.X = _vertical ? ClayAlignmentX.Center : ClayAlignmentX.Left;
-        label.Layout.ChildAlignment.Y = ClayAlignmentY.Center;
-        Ui.Clay.OpenElement(in label);
-        {
-            var desc = ClayTextDesc.Default();
-            desc.TextColor = (IsEnabled ? ValueColor : DisabledValueColor).ToClay();
-            desc.FontId = FontId;
-            desc.FontSize = (ushort)FontSize;
-            desc.WrapMode = ClayTextWrapMode.None;
-            Ui.Clay.Text(ValueText, in desc);
-        }
-        Ui.Clay.CloseElement();
+        _formattedValue = _value;
+        _valueLength = _value.TryFormat(_valueText, out var written, ValueFormat, CultureInfo.InvariantCulture) ? written : 0;
+    }
+
+    private float Snap(float value)
+    {
+        return Step > 0 ? Min + MathF.Round((value - Min) / Step) * Step : value;
     }
 }

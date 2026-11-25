@@ -1,11 +1,10 @@
-using System.Numerics;
 using DenOfIz;
 
 namespace NiziKit.UI.Widgets;
 
 public class Label : Widget
 {
-    private readonly TextCache _cache = new();
+    private uint _textId;
 
     public Label()
     {
@@ -22,57 +21,56 @@ public class Label : Widget
     }
 
     public string Text { get; set; } = "";
+
     public Func<string>? TextBinding { get; set; }
-    public int FontSize { get; set; } = 14;
-    public ushort FontId { get; set; } = Fonts.DefaultFontId;
-    public Color Color { get; set; } = Color.Rgb(235, 235, 240);
-    public bool Wrap { get; init; } = true;
-    public Align TextAlign { get; init; } = Align.Start;
-    public Align VerticalAlign { get; init; } = Align.Start;
 
-    public Vector2 Measure()
-    {
-        return _cache.Measure(Text, FontId, (ushort)FontSize);
-    }
+    public float FontSize { get; set; }
 
-    protected override void ApplyDeclaration(ref ClayElementDeclaration decl)
-    {
-        base.ApplyDeclaration(ref decl);
-        decl.Layout.ChildAlignment.X = TextAlign.ToClayX();
-        decl.Layout.ChildAlignment.Y = VerticalAlign.ToClayY();
-    }
+    public ushort FontId { get; set; }
 
-    protected override void OnStyleResolved(in StyleState state)
+    public UIColor? Color { get; set; }
+
+    public bool Muted { get; set; }
+
+    public UITextWrap Wrap { get; set; } = UITextWrap.Words;
+    public UITextAlign Align { get; set; }
+
+    public uint MaxLines { get; set; }
+
+    public bool Ellipsis { get; set; }
+
+    protected override void OnBuild()
     {
-        if (state.Text is { } text)
+        var text = TextBinding?.Invoke() ?? Text;
+        var theme = Ui.Theme;
+        var color = Color ?? (!Enabled ? theme.TextDisabled : Muted ? theme.TextMuted : theme.Text);
+        var desc = Ui.TextStyle(FontSize, color, FontId);
+        desc.Wrap = Wrap;
+        desc.Align = Align;
+        desc.MaxLines = MaxLines;
+        desc.Overflow = Ellipsis ? UITextOverflow.Ellipsis : UITextOverflow.Clip;
+
+        if (!HasCustomLayout)
         {
-            Color = text;
-        }
-    }
-
-    protected override void BuildContent()
-    {
-        if (TextBinding != null)
-        {
-            var bound = TextBinding();
-            if (!ReferenceEquals(bound, Text) && !string.Equals(bound, Text, StringComparison.Ordinal))
+            if (!Visible)
             {
-                Text = bound;
+                return;
             }
-        }
 
-        var view = _cache.Get(Text);
-        if (view.NumChars == 0)
-        {
+            desc.Id = Id;
+            Ui.Text(text, in desc);
             return;
         }
 
-        var desc = ClayTextDesc.Default();
-        desc.TextColor = Color.ToClay();
-        desc.FontId = FontId;
-        desc.FontSize = (ushort)FontSize;
-        desc.WrapMode = Wrap ? ClayTextWrapMode.Words : ClayTextWrapMode.None;
-        desc.TextAlignment = TextAlign.ToClayText();
-        Ui.Clay.Text(view, in desc);
+        if (_textId == 0)
+        {
+            _textId = Ui.Id(Id, 1);
+        }
+
+        using (OpenSelf())
+        {
+            desc.Id = _textId;
+            Ui.Text(text, in desc);
+        }
     }
 }

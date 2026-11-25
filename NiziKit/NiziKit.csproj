@@ -8,12 +8,27 @@
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
         <IsPackable>true</IsPackable>
         <PackageId>NiziKit</PackageId>
-        <DenOfIzGraphicsVersion Condition="'$(DenOfIzGraphicsVersion)' == ''">1.0.0</DenOfIzGraphicsVersion>
         <Description>A thin managed layer over the DenOfIz graphics library: window management, input, game loop, and graphics helpers (passes, bindings, buffers) for building your own renderer on DirectX12, Vulkan, and Metal.</Description>
     </PropertyGroup>
 
+    <!-- dotnet build -p:DenOfIzSource=Local builds against the DenOfIz checkout at $(DenOfIzRoot) -->
+    <PropertyGroup>
+        <DenOfIzSource Condition="'$(DenOfIzSource)' == ''">NuGet</DenOfIzSource>
+        <DenOfIzGraphicsVersion Condition="'$(DenOfIzGraphicsVersion)' == ''">1.1.0</DenOfIzGraphicsVersion>
+        <DenOfIzRoot Condition="'$(DenOfIzRoot)' == ''">$(MSBuildThisFileDirectory)../../DenOfIz</DenOfIzRoot>
+        <DenOfIzLocalBuildDir Condition="'$(DenOfIzLocalBuildDir)' == ''">$(DenOfIzRoot)/build/DenOfIz/Install_OSX</DenOfIzLocalBuildDir>
+    </PropertyGroup>
+
+    <ItemGroup Condition="'$(DenOfIzSource)' == 'NuGet'">
+        <PackageReference Include="DenOfIzGraphics" Version="$(DenOfIzGraphicsVersion)" />
+    </ItemGroup>
+
+    <ItemGroup Condition="'$(DenOfIzSource)' == 'Local'">
+        <ProjectReference Include="$(DenOfIzRoot)/Bindings/CSharp/DenOfIzGraphicsCSharp.csproj" SetTargetFramework="TargetFramework=net8.0" />
+        <None Include="$(DenOfIzLocalBuildDir)/Graphics/Release/*.dylib;$(DenOfIzLocalBuildDir)/*.dylib" Visible="false" Pack="false" CopyToOutputDirectory="PreserveNewest" Link="%(Filename)%(Extension)" />
+    </ItemGroup>
+
     <ItemGroup>
-      <PackageReference Include="DenOfIzGraphics" Version="1.0.3" />
       <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.0" />
       <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="9.0.0" />
     </ItemGroup>

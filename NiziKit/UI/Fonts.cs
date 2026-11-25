@@ -3,7 +3,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using DenOfIz;
 
-namespace NiziKit.UI.Widgets;
+namespace NiziKit.UI;
 
 public static class Fonts
 {
@@ -30,6 +30,7 @@ public static class Fonts
 
     private static FontLibrary? _library;
     private static readonly Dictionary<ushort, FontEntry> Entries = new();
+    private static readonly List<FontEntry> Removed = new();
 
     public const ushort DefaultFontId = 0;
 
@@ -209,16 +210,12 @@ public static class Fonts
 
     private static void Register(ushort fontId, FontEntry entry)
     {
-        if (Entries.Remove(fontId, out var existing))
+        if (Entries.Remove(fontId, out var existing) && !ReferenceEquals(existing.Font, entry.Font))
         {
-            Ui.Clay.RemoveFont(fontId);
-            if (!ReferenceEquals(existing.Font, entry.Font))
-            {
-                existing.Dispose();
-            }
+            Release(existing);
         }
 
-        Ui.Clay.AddFont(fontId, entry.Font);
+        Ui.Native.AddFont(fontId, entry.Font);
         Entries[fontId] = entry;
     }
 
@@ -229,18 +226,54 @@ public static class Fonts
             return;
         }
 
-        Ui.Clay.RemoveFont(fontId);
-        entry.Dispose();
+        if (Ui.IsInitialized)
+        {
+            Ui.Native.RemoveFont(fontId);
+        }
+
+        Release(entry);
     }
 
-    public static void Shutdown()
+    internal static void ReleaseRemoved()
+    {
+        if (Removed.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var entry in Removed)
+        {
+            entry.Dispose();
+        }
+
+        Removed.Clear();
+    }
+
+    private static void Release(FontEntry entry)
+    {
+        if (!Ui.IsInitialized)
+        {
+            entry.Dispose();
+            return;
+        }
+
+        Removed.Add(entry);
+    }
+
+    internal static void Shutdown()
     {
         foreach (var entry in Entries.Values)
         {
             entry.Dispose();
         }
 
+        foreach (var entry in Removed)
+        {
+            entry.Dispose();
+        }
+
         Entries.Clear();
+        Removed.Clear();
         _library?.Dispose();
         _library = null;
     }

@@ -1,282 +1,555 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using DenOfIz;
-using NiziKit.UI.Widgets;
 
 namespace NiziKit.UI;
 
-/// <summary>
-/// Fluent builder for a Clay element. Obtain via <see cref="Ui.Element"/>, <see cref="Ui.Row"/>
-/// or <see cref="Ui.Column"/>, configure, then call <see cref="Open"/> (with a using scope)
-/// or <see cref="OpenClose"/> for childless elements.
-/// </summary>
-public ref struct Element
+public struct Element
 {
-    private ClayElementDeclaration _decl;
+    private UIElementDesc _desc;
 
-    internal Element(uint id, ClayLayoutDirection direction)
+    public Element(uint id)
     {
-        _decl = ClayElementDeclaration.Default();
-        _decl.Id = id;
-        _decl.Layout.LayoutDirection = direction;
+        _desc.Id = id;
     }
 
-    internal Element WithId(uint id)
+    public Element(in UIElementDesc desc)
     {
-        _decl.Id = id;
-        return this;
+        _desc = desc;
     }
 
-    public Element Row()
+    [UnscopedRef]
+    public ref UIElementDesc Desc => ref _desc;
+
+    [UnscopedRef]
+    public ref Element Id(uint id)
     {
-        _decl.Layout.LayoutDirection = ClayLayoutDirection.LeftToRight;
-        return this;
+        _desc.Id = id;
+        return ref this;
     }
 
-    public Element Column()
+    [UnscopedRef]
+    public ref Element Direction(UIDirection direction)
     {
-        _decl.Layout.LayoutDirection = ClayLayoutDirection.TopToBottom;
-        return this;
+        _desc.Layout.Direction = direction;
+        return ref this;
     }
 
-    public Element Grow()
+    [UnscopedRef]
+    public ref Element Width(UIValue width)
     {
-        _decl.Layout.Sizing.Width = ClaySizingAxis.Grow(0, float.MaxValue);
-        _decl.Layout.Sizing.Height = ClaySizingAxis.Grow(0, float.MaxValue);
-        return this;
+        _desc.Layout.Width = width;
+        return ref this;
     }
 
-    public Element GrowWidth()
+    [UnscopedRef]
+    public ref Element Height(UIValue height)
     {
-        _decl.Layout.Sizing.Width = ClaySizingAxis.Grow(0, float.MaxValue);
-        return this;
+        _desc.Layout.Height = height;
+        return ref this;
     }
 
-    public Element GrowHeight()
+    [UnscopedRef]
+    public ref Element Size(UIValue width, UIValue height)
     {
-        _decl.Layout.Sizing.Height = ClaySizingAxis.Grow(0, float.MaxValue);
-        return this;
+        _desc.Layout.Width = width;
+        _desc.Layout.Height = height;
+        return ref this;
     }
 
-    public Element Fit()
+    [UnscopedRef]
+    public ref Element MinWidth(UIValue width)
     {
-        _decl.Layout.Sizing.Width = ClaySizingAxis.Fit(0, float.MaxValue);
-        _decl.Layout.Sizing.Height = ClaySizingAxis.Fit(0, float.MaxValue);
-        return this;
+        _desc.Layout.MinWidth = width;
+        return ref this;
     }
 
-    public Element FitWidth()
+    [UnscopedRef]
+    public ref Element MinHeight(UIValue height)
     {
-        _decl.Layout.Sizing.Width = ClaySizingAxis.Fit(0, float.MaxValue);
-        return this;
+        _desc.Layout.MinHeight = height;
+        return ref this;
     }
 
-    public Element FitHeight()
+    [UnscopedRef]
+    public ref Element MaxWidth(UIValue width)
     {
-        _decl.Layout.Sizing.Height = ClaySizingAxis.Fit(0, float.MaxValue);
-        return this;
+        _desc.Layout.MaxWidth = width;
+        return ref this;
     }
 
-    public Element Fixed(float width, float height)
+    [UnscopedRef]
+    public ref Element MaxHeight(UIValue height)
     {
-        _decl.Layout.Sizing.Width = ClaySizingAxis.Fixed(width);
-        _decl.Layout.Sizing.Height = ClaySizingAxis.Fixed(height);
-        return this;
+        _desc.Layout.MaxHeight = height;
+        return ref this;
     }
 
-    public Element Width(float width)
+    [UnscopedRef]
+    public ref Element AspectRatio(float widthOverHeight)
     {
-        _decl.Layout.Sizing.Width = ClaySizingAxis.Fixed(width);
-        return this;
+        _desc.Layout.AspectRatio = widthOverHeight;
+        return ref this;
     }
 
-    public Element Height(float height)
+    [UnscopedRef]
+    public ref Element Grow(float grow = 1)
     {
-        _decl.Layout.Sizing.Height = ClaySizingAxis.Fixed(height);
-        return this;
+        _desc.Layout.Grow = grow;
+        return ref this;
     }
 
-    public Element WidthPercent(float percent)
+    [UnscopedRef]
+    public ref Element Shrink(float shrink = 1)
     {
-        _decl.Layout.Sizing.Width = ClaySizingAxis.Percent(percent);
-        return this;
+        _desc.Layout.Shrink = shrink;
+        return ref this;
     }
 
-    public Element HeightPercent(float percent)
+    [UnscopedRef]
+    public ref Element Basis(UIValue basis)
     {
-        _decl.Layout.Sizing.Height = ClaySizingAxis.Percent(percent);
-        return this;
+        _desc.Layout.Basis = basis;
+        return ref this;
     }
 
-    public Element Padding(float all)
+    [UnscopedRef]
+    public ref Element Fill()
     {
-        _decl.Layout.Padding = ClayPadding.CreateUniform(all);
-        return this;
+        _desc.Layout.Grow = 1;
+        _desc.Layout.Shrink = 1;
+        _desc.Layout.Basis = UIValue.Points(0);
+        return ref this;
     }
 
-    public Element Padding(float x, float y)
+    [UnscopedRef]
+    public ref Element Justify(UIJustify justify)
     {
-        _decl.Layout.Padding = ClayPadding.Create(x, x, y, y);
-        return this;
+        _desc.Layout.Justify = justify;
+        return ref this;
     }
 
-    public Element Gap(int gap)
+    [UnscopedRef]
+    public ref Element AlignItems(UIAlign align)
     {
-        _decl.Layout.ChildGap = (ushort)gap;
-        return this;
+        _desc.Layout.AlignItems = align;
+        return ref this;
     }
 
-    public Element Background(Color color)
+    [UnscopedRef]
+    public ref Element AlignSelf(UIAlignSelf align)
     {
-        _decl.BackgroundColor = color.ToClay();
-        return this;
+        _desc.Layout.AlignSelf = align;
+        return ref this;
     }
 
-    public Element CornerRadius(CornerRadius radius)
+    [UnscopedRef]
+    public ref Element AlignContent(UIAlignContent align)
     {
-        _decl.BorderRadius = radius.ToClay();
-        return this;
+        _desc.Layout.AlignContent = align;
+        return ref this;
     }
 
-    public Element Border(Color color, float width)
+    [UnscopedRef]
+    public ref Element Center()
     {
-        _decl.Border.Color = color.ToClay();
-        _decl.Border.Width = ClayBorderWidth.CreateUniform(width);
-        return this;
+        _desc.Layout.Justify = UIJustify.Center;
+        _desc.Layout.AlignItems = UIAlign.Center;
+        return ref this;
     }
 
-    public Element Border(Color color, float width, float betweenChildren)
+    [UnscopedRef]
+    public ref Element Wrap(UIFlexWrap wrap = UIFlexWrap.Wrap)
     {
-        _decl.Border.Color = color.ToClay();
-        _decl.Border.Width = ClayBorderWidth.Create(width, width, width, width, betweenChildren);
-        return this;
+        _desc.Layout.Wrap = wrap;
+        return ref this;
     }
 
-    public Element ScrollVertical()
+    [UnscopedRef]
+    public ref Element Gap(UILength gap)
     {
-        _decl.Scroll.Vertical = true;
-        return this;
+        _desc.Layout.Gap = gap;
+        return ref this;
     }
 
-    public Element ScrollHorizontal()
+    [UnscopedRef]
+    public ref Element LineGap(UILength gap)
     {
-        _decl.Scroll.Horizontal = true;
-        return this;
+        _desc.Layout.LineGap = gap;
+        return ref this;
     }
 
-    public Element Clip()
+    [UnscopedRef]
+    public ref Element Padding(UILength all)
     {
-        _decl.Clip.Horizontal = true;
-        _decl.Clip.Vertical = true;
-        return this;
+        _desc.Layout.Padding = UILengthEdges.All(all);
+        return ref this;
     }
 
-    public Element Clip(bool horizontal, bool vertical, Vector2 childOffset = default)
+    [UnscopedRef]
+    public ref Element Padding(UILength horizontal, UILength vertical)
     {
-        _decl.Clip = ClayClipDesc.Create(horizontal, vertical, childOffset);
-        return this;
+        _desc.Layout.Padding = UILengthEdges.Symmetric(horizontal, vertical);
+        return ref this;
     }
 
-    public Element Overlay(Color color)
+    [UnscopedRef]
+    public ref Element Padding(UILength left, UILength top, UILength right, UILength bottom)
     {
-        _decl.OverlayColor = color.ToClay();
-        return this;
+        _desc.Layout.Padding = new UILengthEdges(left, top, right, bottom);
+        return ref this;
     }
 
-    public Element AspectRatio(float widthOverHeight)
+    [UnscopedRef]
+    public ref Element Margin(UILength all)
     {
-        _decl.AspectRatio = widthOverHeight;
-        return this;
+        _desc.Layout.Margin = UILengthEdges.All(all);
+        return ref this;
     }
 
-    public Element Transition(ClayTransitionDesc transition)
+    [UnscopedRef]
+    public ref Element Margin(UILength horizontal, UILength vertical)
     {
-        _decl.Transition = transition;
-        return this;
+        _desc.Layout.Margin = UILengthEdges.Symmetric(horizontal, vertical);
+        return ref this;
     }
 
-    public Element Transition(float duration,
-        ClayTransitionPropertyFlagBits properties = ClayTransitionPropertyFlagBits.BoundingBox | ClayTransitionPropertyFlagBits.BackgroundColor |
-                                                    ClayTransitionPropertyFlagBits.OverlayColor | ClayTransitionPropertyFlagBits.Border,
-        ClayTransitionEasing easing = ClayTransitionEasing.EaseOut)
+    [UnscopedRef]
+    public ref Element Margin(UILength left = default, UILength top = default, UILength right = default, UILength bottom = default)
     {
-        _decl.Transition = ClayTransitionDesc.Create(duration, properties, easing);
-        return this;
+        _desc.Layout.Margin = new UILengthEdges(left, top, right, bottom);
+        return ref this;
     }
 
-    public Element EnterFrom(ClayTransitionStateDesc state, ClayTransitionEnterTrigger trigger = ClayTransitionEnterTrigger.SkipOnFirstParentFrame)
+    [UnscopedRef]
+    public ref Element Position(UIPosition position)
+    {
+        _desc.Layout.Position = position;
+        return ref this;
+    }
+
+    [UnscopedRef]
+    public ref Element Absolute(UIValue left = default, UIValue top = default, UIValue right = default, UIValue bottom = default)
+    {
+        _desc.Layout.Position = UIPosition.Absolute;
+        _desc.Layout.Insets = new UIInsets(left, top, right, bottom);
+        return ref this;
+    }
+
+    [UnscopedRef]
+    public ref Element Insets(UIValue left = default, UIValue top = default, UIValue right = default, UIValue bottom = default)
+    {
+        _desc.Layout.Insets = new UIInsets(left, top, right, bottom);
+        return ref this;
+    }
+
+    [UnscopedRef]
+    public ref Element Display(UIDisplay display)
+    {
+        _desc.Layout.Display = display;
+        return ref this;
+    }
+
+    [UnscopedRef]
+    public ref Element Hidden(bool hidden = true)
+    {
+        if (hidden)
+        {
+            _desc.Layout.Display = UIDisplay.None;
+        }
+
+        return ref this;
+    }
+
+    [UnscopedRef]
+    public ref Element BoxSizing(UIBoxSizing boxSizing)
+    {
+        _desc.Layout.BoxSizing = boxSizing;
+        return ref this;
+    }
+
+    [UnscopedRef]
+    public ref Element Background(UIColor color)
+    {
+        _desc.Style.BackgroundColor = color;
+        return ref this;
+    }
+
+    [UnscopedRef]
+    public ref Element Border(UIColor color, float width = 1)
+    {
+        _desc.Style.BorderColor = color;
+        _desc.Style.BorderWidth = UIEdges.All(width);
+        return ref this;
+    }
+
+    [UnscopedRef]
+    public ref Element Border(UIColor color, in UIEdges width)
+    {
+        _desc.Style.BorderColor = color;
+        _desc.Style.BorderWidth = width;
+        return ref this;
+    }
+
+    [UnscopedRef]
+    public ref Element CornerRadius(float radius)
+    {
+        _desc.Style.CornerRadius = UICorners.All(radius);
+        return ref this;
+    }
+
+    [UnscopedRef]
+    public ref Element CornerRadius(in UICorners radius)
+    {
+        _desc.Style.CornerRadius = radius;
+        return ref this;
+    }
+
+    [UnscopedRef]
+    public ref Element Overlay(UIColor color)
+    {
+        _desc.Style.OverlayColor = color;
+        return ref this;
+    }
+
+    [UnscopedRef]
+    public ref Element Dividers(UIColor color, float width = 1)
+    {
+        _desc.Style.DividerColor = color;
+        _desc.Style.DividerWidth = width;
+        return ref this;
+    }
+
+    [UnscopedRef]
+    public ref Element Clip()
+    {
+        _desc.Scroll.OverflowX = UIOverflow.Clip;
+        _desc.Scroll.OverflowY = UIOverflow.Clip;
+        return ref this;
+    }
+
+    [UnscopedRef]
+    public ref Element ScrollY()
+    {
+        _desc.Scroll.OverflowX = UIOverflow.Clip;
+        _desc.Scroll.OverflowY = UIOverflow.Scroll;
+        return ref this;
+    }
+
+    [UnscopedRef]
+    public ref Element ScrollX()
+    {
+        _desc.Scroll.OverflowX = UIOverflow.Scroll;
+        _desc.Scroll.OverflowY = UIOverflow.Clip;
+        return ref this;
+    }
+
+    [UnscopedRef]
+    public ref Element Overflow(UIOverflow x, UIOverflow y)
+    {
+        _desc.Scroll.OverflowX = x;
+        _desc.Scroll.OverflowY = y;
+        return ref this;
+    }
+
+    [UnscopedRef]
+    public ref Element HideScrollbar()
+    {
+        _desc.Scroll.Scrollbar = UIScrollbarMode.Hidden;
+        return ref this;
+    }
+
+    [UnscopedRef]
+    public ref Element Scrollbar(UIColor color, float width = 0)
+    {
+        _desc.Scroll.ScrollbarColor = color;
+        _desc.Scroll.ScrollbarWidth = width;
+        return ref this;
+    }
+
+    [UnscopedRef]
+    public ref Element Image(Texture? texture, UIImageFit fit = UIImageFit.Fill)
+    {
+        _desc.Image.Texture = texture;
+        _desc.Image.Fit = fit;
+        return ref this;
+    }
+
+    [UnscopedRef]
+    public ref Element Tint(UIColor color)
+    {
+        _desc.Image.Tint = color;
+        return ref this;
+    }
+
+    [UnscopedRef]
+    public ref Element Uv(Vector4 uv)
+    {
+        _desc.Image.UV = uv;
+        return ref this;
+    }
+
+    [UnscopedRef]
+    public ref Element FloatOnParent(UIAnchor targetAnchor = UIAnchor.TopLeft, UIAnchor anchor = UIAnchor.TopLeft, Vector2 offset = default)
+    {
+        return ref Float(UIFloatingTarget.Parent, 0, targetAnchor, anchor, offset);
+    }
+
+    [UnscopedRef]
+    public ref Element FloatOn(uint targetId, UIAnchor targetAnchor, UIAnchor anchor, Vector2 offset = default)
+    {
+        return ref Float(UIFloatingTarget.Element, targetId, targetAnchor, anchor, offset);
+    }
+
+    [UnscopedRef]
+    public ref Element FloatOnViewport(UIAnchor targetAnchor = UIAnchor.TopLeft, UIAnchor anchor = UIAnchor.TopLeft, Vector2 offset = default)
+    {
+        return ref Float(UIFloatingTarget.Viewport, 0, targetAnchor, anchor, offset);
+    }
+
+    [UnscopedRef]
+    public ref Element ZIndex(int zIndex, bool absolute = false)
+    {
+        _desc.Floating.ZIndex = zIndex;
+        SetFloatingFlag(UIFloatingFlagBits.AbsoluteZ, absolute);
+        return ref this;
+    }
+
+    [UnscopedRef]
+    public ref Element KeepInViewport(bool keep = true)
+    {
+        SetFloatingFlag(UIFloatingFlagBits.KeepInViewport, keep);
+        return ref this;
+    }
+
+    [UnscopedRef]
+    public ref Element ClipToTarget(bool clip = true)
+    {
+        SetFloatingFlag(UIFloatingFlagBits.ClipToTarget, clip);
+        return ref this;
+    }
+
+    [UnscopedRef]
+    public ref Element Focusable(bool focusable = true)
+    {
+        SetFlag(UIElementFlagBits.Focusable, focusable);
+        return ref this;
+    }
+
+    [UnscopedRef]
+    public ref Element Disabled(bool disabled = true)
+    {
+        SetFlag(UIElementFlagBits.Disabled, disabled);
+        return ref this;
+    }
+
+    [UnscopedRef]
+    public ref Element Pointer(UIPointerMode mode)
+    {
+        _desc.Pointer = mode;
+        return ref this;
+    }
+
+    [UnscopedRef]
+    public ref Element Passthrough()
+    {
+        _desc.Pointer = UIPointerMode.Passthrough;
+        return ref this;
+    }
+
+    [UnscopedRef]
+    public ref Element Cursor(SystemCursor cursor)
+    {
+        _desc.Cursor = cursor;
+        return ref this;
+    }
+
+    [UnscopedRef]
+    public ref Element Animate(UITransitionPropertyFlagBits properties = UITransitionPropertyFlagBits.Colors, float duration = 0,
+        UIEasing easing = UIEasing.EaseOut)
+    {
+        _desc.Transition.Duration = duration > 0 ? duration : Ui.Theme.TransitionDuration;
+        _desc.Transition.Properties = (uint)properties;
+        _desc.Transition.Easing = easing;
+        return ref this;
+    }
+
+    [UnscopedRef]
+    public ref Element Enter(in UITransitionState state)
     {
         EnsureTransition();
-        _decl.Transition = _decl.Transition.WithEnter(state, trigger);
-        return this;
+        _desc.Transition.Enter = state;
+        return ref this;
     }
 
-    public Element ExitTo(ClayTransitionStateDesc state, ClayTransitionExitTrigger trigger = ClayTransitionExitTrigger.SkipWhenParentExits,
-        ClayExitTransitionSiblingOrdering siblingOrdering = ClayExitTransitionSiblingOrdering.UnderneathSiblings)
+    [UnscopedRef]
+    public ref Element Exit(in UITransitionState state)
     {
         EnsureTransition();
-        _decl.Transition = _decl.Transition.WithExit(state, trigger, siblingOrdering);
-        return this;
+        _desc.Transition.Exit = state;
+        return ref this;
     }
 
-    public Element FadeIn(Color from)
+    [UnscopedRef]
+    public ref Element TransitionFlags(UITransitionFlagBits flags)
     {
-        return EnterFrom(ClayTransitionStateDesc.FromOverlay(from.ToClay()));
+        _desc.Transition.Flags = (uint)flags;
+        return ref this;
     }
 
-    public Element FadeOut(Color to)
+    public readonly Scope Open()
     {
-        return ExitTo(ClayTransitionStateDesc.FromOverlay(to.ToClay()));
+        return new Scope(Ui.Open(in _desc));
     }
 
-    public Element SlideIn(Vector2 fromOffset)
+    public readonly uint Leaf()
     {
-        return EnterFrom(ClayTransitionStateDesc.FromOffset(fromOffset));
-    }
-
-    public Element SlideOut(Vector2 toOffset)
-    {
-        return ExitTo(ClayTransitionStateDesc.FromOffset(toOffset));
+        var id = Ui.Open(in _desc);
+        Ui.Close();
+        return id;
     }
 
     private void EnsureTransition()
     {
-        if (!_decl.Transition.Enabled)
+        if (_desc.Transition.Duration <= 0)
         {
-            _decl.Transition = ClayTransitionDesc.Default();
+            _desc.Transition.Duration = Ui.Theme.TransitionDuration;
         }
     }
 
-    public Element CenterChildren()
+    [UnscopedRef]
+    private ref Element Float(UIFloatingTarget target, uint targetId, UIAnchor targetAnchor, UIAnchor anchor, Vector2 offset)
     {
-        _decl.Layout.ChildAlignment.X = ClayAlignmentX.Center;
-        _decl.Layout.ChildAlignment.Y = ClayAlignmentY.Center;
-        return this;
+        _desc.Floating.Target = target;
+        _desc.Floating.TargetId = targetId;
+        _desc.Floating.TargetAnchor = targetAnchor;
+        _desc.Floating.Anchor = anchor;
+        _desc.Floating.Offset = offset;
+        return ref this;
     }
 
-    public Element AlignChildren(ClayAlignmentX x, ClayAlignmentY y)
+    private void SetFlag(UIElementFlagBits flag, bool set)
     {
-        _decl.Layout.ChildAlignment.X = x;
-        _decl.Layout.ChildAlignment.Y = y;
-        return this;
-    }
-    public Scope Open()
-    {
-        Ui.Clay.OpenElement(in _decl);
-        return default;
+        _desc.Flags = set ? _desc.Flags | (uint)flag : _desc.Flags & ~(uint)flag;
     }
 
-    public void OpenClose()
+    private void SetFloatingFlag(UIFloatingFlagBits flag, bool set)
     {
-        Open();
-        Ui.Clay.CloseElement();
+        _desc.Floating.Flags = set ? _desc.Floating.Flags | (uint)flag : _desc.Floating.Flags & ~(uint)flag;
     }
 }
 
-/// <summary>Scope returned by <see cref="Element.Open"/>; disposing closes the element.</summary>
-public readonly ref struct Scope : IDisposable
+public readonly ref struct Scope
 {
+    internal Scope(uint id)
+    {
+        Id = id;
+    }
+
+    public uint Id { get; }
+
     public void Dispose()
     {
-        Ui.Clay.CloseElement();
+        Ui.Close();
     }
 }
