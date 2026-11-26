@@ -20,6 +20,12 @@ public abstract class TextInput : Widget
     public Action<string>? OnSubmit { get; set; }
     public float FontSize { get; set; }
 
+    /// <summary>
+    /// Fills the parent's width and ignores <see cref="Widget.Width"/>: stretches across a Column and grows along a Row. Off by default,
+    /// where a TextField is 200 wide.
+    /// </summary>
+    public bool Stretch { get; set; }
+
     public bool ReadOnly
     {
         get => Editor.ReadOnly;
@@ -173,6 +179,22 @@ public abstract class TextInput : Widget
         var theme = Ui.Theme;
         var enabled = EnabledNow;
         var desc = Desc();
+        if (Stretch)
+        {
+            ref var layout = ref desc.Layout;
+            layout.Width = UIValue.Auto;
+            if (Ui.ParentIsRow)
+            {
+                layout.Grow = 1;
+                layout.Shrink = 1;
+                layout.Basis = UIValue.Points(0);
+            }
+            else
+            {
+                layout.AlignSelf = UIAlignSelf.Stretch;
+            }
+        }
+
         desc.Style.BorderWidth = UIEdges.All(1);
         desc.Style.BackgroundColor = enabled ? theme.Surface : theme.Disabled;
         desc.Style.BorderColor = !enabled ? theme.Disabled : IsFocused ? theme.Accent : IsHovered ? theme.BorderStrong : theme.Border;

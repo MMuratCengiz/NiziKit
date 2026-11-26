@@ -29,7 +29,9 @@ public enum ColorRole : byte
     Backdrop,
     TooltipBackground,
     TooltipText,
-    FocusRing
+    FocusRing,
+    Success,
+    Warning
 }
 
 public readonly struct Color : IEquatable<Color>
@@ -74,6 +76,8 @@ public readonly struct Color : IEquatable<Color>
     public static Color TooltipBackground => new(ColorRole.TooltipBackground);
     public static Color TooltipText => new(ColorRole.TooltipText);
     public static Color FocusRing => new(ColorRole.FocusRing);
+    public static Color Success => new(ColorRole.Success);
+    public static Color Warning => new(ColorRole.Warning);
 
     public bool IsSet => _role != ColorRole.None || _rgba.A != 0 || _alpha > 0;
 
@@ -137,6 +141,8 @@ public readonly struct Color : IEquatable<Color>
             ColorRole.TooltipBackground => theme.TooltipBackground,
             ColorRole.TooltipText => theme.TooltipText,
             ColorRole.FocusRing => theme.FocusRing,
+            ColorRole.Success => theme.Success,
+            ColorRole.Warning => theme.Warning,
             _ => _rgba
         };
         return _alpha >= 0 ? new UIColor(color.R, color.G, color.B, (byte)_alpha) : color;
@@ -333,6 +339,16 @@ public struct TextStyle
     public float LetterSpacing;
     public float LineHeight;
 
+    /// <summary>
+    /// Draws the text in <see cref="Theme.MonoFontId"/> when <see cref="Font"/> is 0, also when <see cref="Theme.FontId"/> is another font.
+    /// </summary>
+    public bool Mono;
+
+    /// <summary>
+    /// The face registered with <see cref="Fonts.SetVariant"/> for this weight, else Medium and Bold are synthesized from the font.
+    /// </summary>
+    public FontWeight Weight;
+
     public static TextStyle Body => default;
     public static TextStyle Muted => new() { Role = TextRole.Muted };
     public static TextStyle Small => new() { Role = TextRole.Small };
@@ -366,10 +382,15 @@ public struct TextStyle
         {
             FontSize = size,
             Color = color,
-            FontId = Font != 0 ? Font : theme.FontId,
+            FontId = Fonts.Styled(Family(theme), Weight, false),
             LetterSpacing = LetterSpacing != 0 ? LetterSpacing : Role == TextRole.Caption ? 0.7f : 0,
             LineHeight = LineHeight
         };
+    }
+
+    internal readonly ushort Family(Theme theme)
+    {
+        return Font != 0 ? Font : Mono ? theme.MonoFontId : theme.FontId;
     }
 }
 

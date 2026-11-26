@@ -24,6 +24,7 @@ public static partial class Ui
         public required string Text;
         public Color Color;
         public float Age;
+        public float Lifetime;
     }
 
     private static DzUI? _ui;
@@ -124,7 +125,7 @@ public static partial class Ui
 
             foreach (var notification in Notifications)
             {
-                next = MathF.Min(next, NotificationLifetime - notification.Age);
+                next = MathF.Min(next, notification.Lifetime - notification.Age);
             }
 
             return next;
@@ -182,6 +183,7 @@ public static partial class Ui
         }
 
         OpenPopups.Clear();
+        TextSelection.Reset();
         _built.Clear();
         _previous.Clear();
         _focusedWidget = null;
@@ -295,7 +297,15 @@ public static partial class Ui
 
     public static void Notify(string text, Color color = default)
     {
-        Notifications.Add(new Notification { Id = ++_nextNotification, Text = text, Color = color.IsSet ? color : Color.Accent });
+        Notify(text, NotificationLifetime, color);
+    }
+
+    /// <summary>
+    /// Shows a toast for <paramref name="seconds"/> instead of the default 3.5. At most 4 are shown; a new one drops the oldest.
+    /// </summary>
+    public static void Notify(string text, float seconds, Color color = default)
+    {
+        Notifications.Add(new Notification { Id = ++_nextNotification, Text = text, Color = color.IsSet ? color : Color.Accent, Lifetime = seconds });
         if (Notifications.Count > 4)
         {
             Notifications.RemoveAt(0);
@@ -444,7 +454,7 @@ public static partial class Ui
     {
         for (var i = Notifications.Count - 1; i >= 0; i--)
         {
-            if ((Notifications[i].Age += DeltaTime) > NotificationLifetime)
+            if ((Notifications[i].Age += DeltaTime) > Notifications[i].Lifetime)
             {
                 Notifications.RemoveAt(i);
             }
@@ -524,6 +534,11 @@ public static partial class Ui
         }
 
         if (_focusedWidget is { EnabledNow: true } focused && focused.OnKeyDown(in key))
+        {
+            return true;
+        }
+
+        if (TextSelection.HandleKey(in key))
         {
             return true;
         }

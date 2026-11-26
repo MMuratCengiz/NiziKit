@@ -89,6 +89,7 @@ internal sealed partial class Gallery
                     {
                         _dark = on;
                         Ui.Theme = on ? Theme.Dark() : Theme.Light();
+                        Ui.Theme.FontId = BodyFontId;
                     })
                 }
             ]

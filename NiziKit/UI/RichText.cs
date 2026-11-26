@@ -1,14 +1,39 @@
+using System.Numerics;
 using DenOfIz;
 
 namespace NiziKit.UI;
 
-public sealed class RichText : Widget
+/// <summary>
+/// How RichText lays out lines of a <c>pre</c> block that are wider than the block.
+/// </summary>
+public enum PreOverflow
+{
+    /// <summary>
+    /// The block cuts them off.
+    /// </summary>
+    Clip,
+
+    /// <summary>
+    /// They wrap like <c>white-space: pre-wrap</c>: newlines and spaces are kept and a word longer than the line breaks.
+    /// </summary>
+    Wrap,
+
+    /// <summary>
+    /// The block scrolls sideways. DenOfIz turns a vertical wheel over a block that only scrolls sideways into a sideways scroll until the
+    /// block reaches its end, so in a vertical list the wheel stops at each wide block.
+    /// </summary>
+    Scroll
+}
+
+public sealed class RichText : Widget, ISelectableText
 {
     private MarkupDocument? _document;
     private string? _source;
     private float _sourceSize;
+    private PreOverflow _sourcePre;
     private int _hoveredLink = -1;
     private MarkupParagraph? _hoveredParagraph;
+    private TextSelection? _selection;
 
     public RichText(string markup, TextStyle style = default)
     {
@@ -26,11 +51,81 @@ public sealed class RichText : Widget
     public TextStyle Style { get; set; }
     public Action<string>? OnLink { get; set; }
 
+    /// <summary>
+    /// Lines of <c>pre</c> blocks wider than the text, Clip by default. A <c>white-space</c> style on a block wins:
+    /// <c>&lt;pre style="white-space: pre-wrap"&gt;</c> wraps under Clip too.
+    /// </summary>
+    public PreOverflow PreOverflow { get; set; }
+
+    /// <summary>
+    /// Lets the user select the text like <see cref="Label.Selectable"/>. A selection can span paragraphs, a triple click selects one paragraph,
+    /// and a link does not open when the press that ends on it selected text.
+    /// </summary>
+    public bool Selectable { get; set; }
+
+    /// <summary>
+    /// The selected text as plain text, one line per paragraph, without markup, list markers or images. Empty without a selection.
+    /// </summary>
+    public string SelectedText => _selection?.Text ?? "";
+
+    internal override bool Interactive => base.Interactive || Selectable;
+
+    int ISelectableText.BlockCount => _document?.Paragraphs.Count ?? 0;
+
+    ReadOnlySpan<byte> ISelectableText.Block(int index)
+    {
+        return _document is { } document && index < document.Paragraphs.Count ? document.Paragraphs[index].Utf8 : default;
+    }
+
+    uint ISelectableText.TextId(int block)
+    {
+        return _document is { } document && block < document.Paragraphs.Count ? TextId(document.Paragraphs[block]) : 0;
+    }
+
+    (int Block, int Offset) ISelectableText.OffsetAt(Vector2 point)
+    {
+        if (_document == null)
+        {
+            return (0, 0);
+        }
+
+        var paragraphs = _document.Paragraphs;
+        var nearest = 0;
+        var distance = float.MaxValue;
+        for (var i = 0; i < paragraphs.Count; i++)
+        {
+            if (!Ui.TryGetRect(TextId(paragraphs[i]), out var rect))
+            {
+                continue;
+            }
+
+            var dx = MathF.Max(0, MathF.Max(rect.X - point.X, point.X - rect.X - rect.Width));
+            var dy = MathF.Max(0, MathF.Max(rect.Y - point.Y, point.Y - rect.Y - rect.Height));
+            var d = dx * dx + dy * dy;
+            if (d < distance)
+            {
+                distance = d;
+                nearest = i;
+            }
+        }
+
+        return nearest < paragraphs.Count ? (nearest, (int)Ui.Native.GetTextOffsetAtPoint(TextId(paragraphs[nearest]), point)) : (0, 0);
+    }
+
     internal override void Dispatch()
     {
         base.Dispatch();
         _hoveredLink = -1;
         _hoveredParagraph = null;
+        if (Selectable && EnabledNow)
+        {
+            (_selection ??= new TextSelection(this)).Update(in State);
+        }
+        else
+        {
+            _selection?.Clear();
+        }
+
         if (_document == null)
         {
             return;
@@ -63,7 +158,7 @@ public sealed class RichText : Widget
                 _hoveredParagraph = paragraph;
             }
 
-            if (state.Clicked && EnabledNow && !Consumed)
+            if (state.Clicked && EnabledNow && !Consumed && _selection is not { HasSelection: true })
             {
                 ConsumeAncestors();
                 OnLink?.Invoke(_document.Links[link].Href);
@@ -74,6 +169,7 @@ public sealed class RichText : Widget
     protected internal override void Describe(UiWidgetInfo info)
     {
         info.Text = Markup.Value;
+        TextSelection.Describe(info, Selectable, _selection);
     }
 
     internal override void Render()
@@ -81,11 +177,12 @@ public sealed class RichText : Widget
         var theme = Ui.Theme;
         var text = Style.Resolve(theme, EnabledNow);
         var markup = Markup.Value ?? "";
-        if (_document == null || text.FontSize != _sourceSize || !string.Equals(markup, _source, StringComparison.Ordinal))
+        if (_document == null || text.FontSize != _sourceSize || PreOverflow != _sourcePre || !string.Equals(markup, _source, StringComparison.Ordinal))
         {
-            _document = MarkupBuilder.Build(markup, text.FontSize);
+            _document = MarkupBuilder.Build(markup, text.FontSize, PreOverflow);
             _source = markup;
             _sourceSize = text.FontSize;
+            _sourcePre = PreOverflow;
             _hoveredLink = -1;
             _hoveredParagraph = null;
         }
@@ -95,6 +192,10 @@ public sealed class RichText : Widget
         if (_hoveredLink >= 0)
         {
             desc.Cursor = SystemCursor.Pointer;
+        }
+        else if (Selectable)
+        {
+            desc.Cursor = SystemCursor.Text;
         }
 
         Ui.Open(in desc);
@@ -115,11 +216,11 @@ public sealed class RichText : Widget
         for (var i = 0; i < children.Count; i++)
         {
             var top = i == 0 ? 0 : Math.Max(children[i - 1].Box.MarginBottom, children[i].Box.MarginTop);
-            Block(children[i], top, in text, theme);
+            Block(children[i], top, container.Box.ScrollX, in text, theme);
         }
     }
 
-    private void Block(MarkupBlock block, float top, in UITextDesc text, Theme theme)
+    private void Block(MarkupBlock block, float top, bool scrolled, in UITextDesc text, Theme theme)
     {
         var box = block.Box;
         var desc = new UIElementDesc { Id = Ui.Id(Id, (uint)block.Index * 2 + 1) };
@@ -146,9 +247,20 @@ public sealed class RichText : Widget
             desc.Scroll.OverflowY = UIOverflow.Clip;
         }
 
+        if (box.ScrollX)
+        {
+            desc.Scroll.OverflowX = UIOverflow.Scroll;
+            desc.Scroll.OverflowY = UIOverflow.Clip;
+        }
+
         switch (block)
         {
             case MarkupParagraph paragraph:
+                if (scrolled)
+                {
+                    layout.Display = UIDisplay.Contents;
+                }
+
                 Ui.Open(in desc);
                 Paragraph(paragraph, in text, theme);
                 Ui.Close();
@@ -191,7 +303,7 @@ public sealed class RichText : Widget
         markerText.Id = Ui.Id(id, 3);
         markerText.FontSize = size;
         markerText.Color = item.MarkerColor.Resolve(theme);
-        markerText.FontId = Fonts.Styled(text.FontId, item.MarkerStyle.Bold, false);
+        markerText.FontId = Fonts.Styled(Style.Family(theme), Weight(item.MarkerStyle.Bold), false);
         markerText.Wrap = UITextWrap.None;
         Ui.Text(marker, in markerText);
         Ui.Close();
@@ -246,6 +358,12 @@ public sealed class RichText : Widget
         desc.Wrap = paragraph.Wrap;
         desc.Align = paragraph.Align;
         desc.LineHeight = paragraph.LineHeight;
+        if (_selection is { HasSelection: true } selection && selection.Range(paragraph.Ordinal, paragraph.Utf8.Length, out var start, out var end))
+        {
+            desc.Selection = new UITextSelection { Start = start, End = end, Color = theme.Selection };
+        }
+
+        var family = Style.Family(theme);
 
         var runs = paragraph.Runs;
         var native = paragraph.Native;
@@ -264,7 +382,7 @@ public sealed class RichText : Widget
             {
                 ByteEnd = (uint)run.ByteEnd,
                 Id = style.Link >= 0 ? (uint)style.Link + 1 : 0,
-                FontId = Fonts.Styled(style.Mono ? Fonts.DefaultFontId : text.FontId, style.Bold, style.Italic),
+                FontId = Fonts.Styled(style.Mono ? theme.MonoFontId : family, Weight(style.Bold), style.Italic),
                 FontSize = style.Size,
                 Color = color,
                 BackgroundColor = style.Background.IsSet ? style.Background.Resolve(theme) : default,
@@ -283,6 +401,11 @@ public sealed class RichText : Widget
         {
             Ui.OfferTooltip(desc.Id, title);
         }
+    }
+
+    private FontWeight Weight(bool bold)
+    {
+        return bold ? FontWeight.Bold : Style.Weight;
     }
 
     private static void InlineImage(ref UITextRun run, MarkupImage image, float size, float shift)

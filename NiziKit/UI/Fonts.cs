@@ -3,11 +3,19 @@ using DenOfIz;
 
 namespace NiziKit.UI;
 
+public enum FontWeight
+{
+    Regular,
+    Medium,
+    Bold
+}
+
 public static class Fonts
 {
     private static readonly Dictionary<ushort, Font> Entries = new();
     private static readonly List<Font> Removed = new();
-    private static readonly Dictionary<(ushort, bool, bool), (ushort Id, ulong Base)> Synthesized = new();
+    private static readonly Dictionary<(ushort, FontWeight), ushort> Variants = new();
+    private static readonly Dictionary<(ushort, FontWeight, bool), (ushort Id, ulong Base)> Synthesized = new();
     private static ushort _nextSynthesizedId = 63;
 
     public const ushort DefaultFontId = 0;
@@ -73,25 +81,48 @@ public static class Fonts
         Release(font);
     }
 
-    // Bold and italic faces drawn from a regular one, given the top font ids so they stay clear of the ones apps pick.
-    internal static ushort Styled(ushort fontId, bool bold, bool italic)
+    /// <summary>
+    /// Draws <paramref name="fontId"/> at <paramref name="weight"/> with the font registered as <paramref name="variantId"/>, e.g. the bold face of
+    /// a family loaded from its own file. Applies to <see cref="TextStyle.Weight"/> and RichText <c>b</c> and <c>strong</c>; without a variant
+    /// those are synthesized. The mapping is between ids, so it survives loading another font into either id.
+    /// </summary>
+    public static void SetVariant(ushort fontId, FontWeight weight, ushort variantId)
     {
-        if (!bold && !italic)
+        if (weight == FontWeight.Regular)
+        {
+            throw new ArgumentOutOfRangeException(nameof(weight), "The regular face is the font itself");
+        }
+
+        Variants[(fontId, weight)] = variantId;
+    }
+
+    // Faces drawn from a regular one, given the top font ids so they stay clear of the ones apps pick.
+    internal static ushort Styled(ushort fontId, FontWeight weight, bool italic)
+    {
+        if (weight != FontWeight.Regular && Variants.TryGetValue((fontId, weight), out var variant))
+        {
+            fontId = variant;
+            weight = FontWeight.Regular;
+        }
+
+        if (weight == FontWeight.Regular && !italic)
         {
             return fontId;
         }
 
-        var baseFont = Entries.TryGetValue(fontId, out var registered) ? registered : Font.GetDefault();
-        var key = (fontId, bold, italic);
-        if (Synthesized.TryGetValue(key, out var entry) && entry.Base == (ulong)baseFont)
+        var registered = Entries.GetValueOrDefault(fontId);
+        var handle = registered != null ? (ulong)registered : 0;
+        var key = (fontId, weight, italic);
+        if (Synthesized.TryGetValue(key, out var entry) && entry.Base == handle)
         {
             return entry.Id;
         }
 
         var id = entry.Id != 0 ? entry.Id : _nextSynthesizedId--;
-        var font = Font.CreateSynthetic(baseFont, new FontSynthesisDesc { Bold = bold ? 0.035f : 0, Slant = italic ? 0.2f : 0 });
+        var bold = weight switch { FontWeight.Medium => 0.018f, FontWeight.Bold => 0.035f, _ => 0 };
+        var font = Font.CreateSynthetic(registered ?? Font.GetDefault(), new FontSynthesisDesc { Bold = bold, Slant = italic ? 0.2f : 0 });
         Register(id, font);
-        Synthesized[key] = (id, baseFont);
+        Synthesized[key] = (id, handle);
         return id;
     }
 
@@ -138,6 +169,7 @@ public static class Fonts
 
         ReleaseRemoved();
         Entries.Clear();
+        Variants.Clear();
         Synthesized.Clear();
         _nextSynthesizedId = 63;
     }

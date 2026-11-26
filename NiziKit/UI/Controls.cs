@@ -591,7 +591,12 @@ public class Dropdown : Widget
     public IReadOnlyList<string> Items { get; set; }
     public Bound<int> Selected { get; set; }
     public Action<int>? OnChange { get; set; }
-    public string Placeholder { get; set; } = "Select...";
+
+    /// <summary>
+    /// Shown while <see cref="Selected"/> is outside <see cref="Items"/>, e.g. -1. Read every frame when bound; null shows nothing.
+    /// </summary>
+    public Prop<string?> Placeholder { get; set; } = "Select...";
+
     public float MaxListHeight { get; set; } = 240;
 
     public bool IsOpen => _list.IsOpen;
@@ -600,7 +605,7 @@ public class Dropdown : Widget
     {
         var selected = Selected.Value;
         info.Value = selected;
-        info.Text = selected >= 0 && selected < Items.Count ? Items[selected] : Placeholder;
+        info.Text = selected >= 0 && selected < Items.Count ? Items[selected] : Placeholder.Value;
         info.Set("items", Items);
         info.Set("open", IsOpen);
     }
@@ -686,7 +691,7 @@ public class Dropdown : Widget
         OfferTooltip();
         var index = Selected.Value;
         var selected = index >= 0 && index < Items.Count ? Items[index] : null;
-        Ui.Line(selected ?? Placeholder, 0, !enabled ? theme.TextDisabled : selected == null ? theme.TextMuted : theme.Text);
+        Ui.Line(selected ?? Placeholder.Value, 0, !enabled ? theme.TextDisabled : selected == null ? theme.TextMuted : theme.Text);
         if (FontAwesome.IsInitialized)
         {
             Ui.Glyph(open ? FontAwesome.AngleUp : FontAwesome.AngleDown, theme.SmallFontSize, enabled ? theme.TextMuted : theme.TextDisabled);

@@ -207,18 +207,7 @@ internal sealed class TextEditor
         }
         else if (interaction.ClickCount == 2)
         {
-            var start = offset;
-            var end = offset;
-            while (start > 0 && IsWordByte(_bytes[start - 1]))
-            {
-                start--;
-            }
-
-            while (end < _length && IsWordByte(_bytes[end]))
-            {
-                end++;
-            }
-
+            var (start, end) = WordAt(Bytes, offset);
             Select(start, end);
         }
         else
@@ -377,6 +366,23 @@ internal sealed class TextEditor
         }
 
         return offset;
+    }
+
+    public static (int Start, int End) WordAt(ReadOnlySpan<byte> text, int offset)
+    {
+        var start = Math.Clamp(offset, 0, text.Length);
+        var end = start;
+        while (start > 0 && IsWordByte(text[start - 1]))
+        {
+            start--;
+        }
+
+        while (end < text.Length && IsWordByte(text[end]))
+        {
+            end++;
+        }
+
+        return (start, end);
     }
 
     public static int CodepointCount(ReadOnlySpan<byte> text)

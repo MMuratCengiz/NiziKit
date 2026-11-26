@@ -40,12 +40,18 @@ internal sealed class GalleryGame() : Game(new GameDesc
         _pattern = PatternTexture.Create(Environment.GetEnvironmentVariable("UIGALLERY_AUTOALIGN") == "1");
         _gallery = new Gallery(() => _visualizer.Texture, _pattern);
         Ui.Root = _gallery.Root;
+        _gallery.Tabs.OnChange = page => Window.Title = $"NiziKit UI Gallery: {page}";
         if (_page >= 1 && _page <= Enum.GetValues<GalleryPage>().Length)
         {
             _gallery.Tabs.Select((GalleryPage)(_page - 1));
         }
 
         _statsAllocated = GC.GetAllocatedBytesForCurrentThread();
+    }
+
+    protected override void Update(float dt)
+    {
+        _gallery.Pump();
     }
 
     protected override void Render(float dt)

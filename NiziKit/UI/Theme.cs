@@ -20,6 +20,8 @@ public sealed class Theme
     public UIColor Danger { get; set; }
     public UIColor DangerHover { get; set; }
     public UIColor DangerPressed { get; set; }
+    public UIColor Success { get; set; }
+    public UIColor Warning { get; set; }
     public UIColor Hover { get; set; }
     public UIColor Pressed { get; set; }
     public UIColor Disabled { get; set; }
@@ -31,6 +33,13 @@ public sealed class Theme
     public UIColor FocusRing { get; set; }
 
     public ushort FontId { get; set; }
+
+    /// <summary>
+    /// The font of <see cref="TextStyle.Mono"/> text and of RichText <c>code</c>, <c>kbd</c>, <c>samp</c>, <c>tt</c> and <c>pre</c>. 0, the
+    /// default, is the built-in JetBrains Mono, also when <see cref="FontId"/> is another font.
+    /// </summary>
+    public ushort MonoFontId { get; set; }
+
     public float FontSize { get; set; } = 14;
     public float SmallFontSize { get; set; } = 12;
     public float CaptionFontSize { get; set; } = 10;
@@ -59,6 +68,8 @@ public sealed class Theme
             Danger = UIColor.Hex(0xD9484BFF),
             DangerHover = UIColor.Hex(0xE85F61FF),
             DangerPressed = UIColor.Hex(0xB93A3DFF),
+            Success = UIColor.Hex(0x4CB860FF),
+            Warning = UIColor.Hex(0xE0A33AFF),
             Hover = UIColor.Hex(0x2F3440FF),
             Pressed = UIColor.Hex(0x2A2E39FF),
             Disabled = UIColor.Hex(0x272A33FF),
@@ -91,6 +102,8 @@ public sealed class Theme
             Danger = UIColor.Hex(0xDC2626FF),
             DangerHover = UIColor.Hex(0xB91C1CFF),
             DangerPressed = UIColor.Hex(0x991B1BFF),
+            Success = UIColor.Hex(0x16A34AFF),
+            Warning = UIColor.Hex(0xD97706FF),
             Hover = UIColor.Hex(0xE5E9F0FF),
             Pressed = UIColor.Hex(0xD5DBE4FF),
             Disabled = UIColor.Hex(0xE5E7EBFF),

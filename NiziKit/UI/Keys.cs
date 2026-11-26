@@ -11,6 +11,8 @@ internal static class Keys
 
     public static bool Shift(uint mod) => (mod & ShiftMask) != 0;
 
+    public static bool Alt(uint mod) => (mod & AltMask) != 0;
+
     public static bool Word(uint mod) => (mod & (AltMask | CtrlMask)) != 0;
 
     public static bool Line(uint mod) => (mod & GuiMask) != 0;

@@ -28,7 +28,10 @@ internal sealed partial class Gallery
         var bass = new Slider(0, 1) { Value = 0.7f, Vertical = true, Height = 140 };
         var treble = new Slider(0, 1) { Value = 0.35f, Vertical = true, Height = 140 };
         QualityDropdown = new Dropdown(Qualities) { Selected = 2, Tooltip = "Up and Down change it while focused" };
-        var country = new Dropdown(Countries) { Selected = -1, Placeholder = "Pick a country", MaxListHeight = 220 };
+        var country = new Dropdown(Countries)
+        {
+            Name = "controls.country", Width = 240, Selected = -1, MaxListHeight = 220, Placeholder = Bind<string?>(() => $"Pick a country for {Qualities[QualityDropdown.Selected.Value]}")
+        };
 
         return Page(
             Grid(
@@ -56,7 +59,22 @@ internal sealed partial class Gallery
                     Line(12, QualityDropdown, country),
                     new Dropdown(Qualities) { Selected = 1, Enabled = false },
                     new Label(() => $"quality {Qualities[QualityDropdown.Selected.Value]}, country {(country.Selected.Value >= 0 ? Countries[country.Selected.Value] : "none")}",
-                        TextStyle.Small))));
+                        TextStyle.Small),
+                    Caption("The country placeholder is bound to the quality.")),
+                Card("Status colors", "Color.Success and Color.Warning are theme roles like Color.Danger; they follow the Dark switch.", 360,
+                    Line(8, Badge("Passed", Color.Success), Badge("Flaky", Color.Warning), Badge("Failed", Color.Danger), Badge("Running", Color.Accent)))));
+    }
+
+    private static Row Badge(string text, Color color)
+    {
+        return new Row
+        {
+            Gap = 6,
+            Padding = (10, 4),
+            Radius = 10,
+            Border = color,
+            Children = [new Icon(FontAwesome.Circle) { Size = 8, Color = color }, new Label(text, TextStyle.Small with { Color = color })]
+        };
     }
 
     private Button Counted(Button button)

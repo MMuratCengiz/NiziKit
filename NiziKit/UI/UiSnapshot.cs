@@ -14,10 +14,21 @@ public enum UiIssueKind
     Overflow,
     Clipped,
     Offscreen,
+
+    /// <summary>
+    /// Text cut off in a box with no width, usually squeezed out by its siblings. Ellipses in boxes with room are <see cref="Ellipsis"/>.
+    /// </summary>
     Truncated,
+
     Overlap,
     Obscured,
-    Empty
+    Empty,
+
+    /// <summary>
+    /// Text shortened with an ellipsis in a box that has room for some of it, as a Label or MaxLines asks. Listed in
+    /// <see cref="UiSnapshot.Ellipsized"/>, not in <see cref="UiSnapshot.Issues"/>; text cut in a box without width stays <see cref="Truncated"/>.
+    /// </summary>
+    Ellipsis
 }
 
 public sealed record UiIssue(UiIssueKind Kind, UiWidgetInfo? Widget, Rectangle Rect, string Message);
@@ -172,6 +183,11 @@ public sealed class UiSnapshot
     public IReadOnlyList<UiWidgetInfo> Widgets { get; private init; } = [];
     public IReadOnlyList<UiNodeInfo> Nodes { get; private init; } = [];
     public IReadOnlyList<UiIssue> Issues { get; private set; } = [];
+
+    /// <summary>
+    /// The texts shortened with an ellipsis on purpose, see <see cref="UiIssueKind.Ellipsis"/>.
+    /// </summary>
+    public IReadOnlyList<UiIssue> Ellipsized { get; private set; } = [];
 
     // Text boxes are rounded up to whole pixels, everything else to the nearest pixel.
     private float Slack => 1 / PixelsPerPoint + 0.01f;
@@ -396,7 +412,9 @@ public sealed class UiSnapshot
         snapshot.Focused = widgets.FirstOrDefault(w => w.Focused);
         var hovered = ui.HoveredId;
         snapshot.Hovered = hovered != 0 && ui.FindNode(hovered) is var hoveredNode && hoveredNode < count ? nodes[hoveredNode].Owner : null;
-        snapshot.Issues = snapshot.FindIssues();
+        var issues = snapshot.FindIssues();
+        snapshot.Issues = issues.Where(i => i.Kind != UiIssueKind.Ellipsis).ToList();
+        snapshot.Ellipsized = issues.Where(i => i.Kind == UiIssueKind.Ellipsis).ToList();
         return snapshot;
     }
 
@@ -460,10 +478,13 @@ public sealed class UiSnapshot
                 continue;
             }
 
-            if (node.Has(UINodeFlagBits.Truncated))
+            if (node.Has(UINodeFlagBits.Truncated) && node.Rect.Width < 1)
             {
-                var collapsed = node.Rect.Width < 1 ? ", its box has no width" : "";
-                issues.Add(new UiIssue(UiIssueKind.Truncated, node.Owner, node.Rect, $"text \"{Shorten(node.Text, 40)}\" is cut off after {node.Lines} line(s){collapsed}"));
+                issues.Add(new UiIssue(UiIssueKind.Truncated, node.Owner, node.Rect, $"text \"{Shorten(node.Text, 40)}\" is cut off after {node.Lines} line(s), its box has no width"));
+            }
+            else if (node.Has(UINodeFlagBits.Truncated))
+            {
+                issues.Add(new UiIssue(UiIssueKind.Ellipsis, node.Owner, node.Rect, $"text \"{Shorten(node.Text, 40)}\" ends in an ellipsis after {node.Lines} line(s)"));
             }
             else if (node.Has(UINodeFlagBits.Overflows))
             {
@@ -722,6 +743,15 @@ public sealed class UiSnapshot
         {
             text.Append($"  {issue.Kind.ToString().ToLowerInvariant()}: {issue.Message}\n");
         }
+
+        if (Ellipsized.Count > 0)
+        {
+            text.Append($"ellipsized on purpose ({Ellipsized.Count})\n");
+            foreach (var issue in Ellipsized)
+            {
+                text.Append($"  {issue.Widget?.Path}: {issue.Message}\n");
+            }
+        }
     }
 
     internal static string Line(UiWidgetInfo w)
@@ -842,18 +872,8 @@ public sealed class UiSnapshot
             }
 
             json.WriteEndArray();
-            json.WriteStartArray("issues");
-            foreach (var issue in Issues)
-            {
-                json.WriteStartObject();
-                json.WriteString("kind", issue.Kind.ToString().ToLowerInvariant());
-                json.WriteString("widget", issue.Widget?.Path);
-                Rect(json, "rect", issue.Rect);
-                json.WriteString("message", issue.Message);
-                json.WriteEndObject();
-            }
-
-            json.WriteEndArray();
+            WriteIssues(json, "issues", Issues);
+            WriteIssues(json, "ellipsized", Ellipsized);
             json.WriteStartArray("widgets");
             foreach (var root in Roots)
             {
@@ -1051,6 +1071,22 @@ public sealed class UiSnapshot
         json.WriteNumberValue(Math.Round(r.Y, 2));
         json.WriteNumberValue(Math.Round(r.Width, 2));
         json.WriteNumberValue(Math.Round(r.Height, 2));
+        json.WriteEndArray();
+    }
+
+    private static void WriteIssues(Utf8JsonWriter json, string name, IReadOnlyList<UiIssue> issues)
+    {
+        json.WriteStartArray(name);
+        foreach (var issue in issues)
+        {
+            json.WriteStartObject();
+            json.WriteString("kind", issue.Kind.ToString().ToLowerInvariant());
+            json.WriteString("widget", issue.Widget?.Path);
+            Rect(json, "rect", issue.Rect);
+            json.WriteString("message", issue.Message);
+            json.WriteEndObject();
+        }
+
         json.WriteEndArray();
     }
 

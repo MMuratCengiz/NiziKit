@@ -1,11 +1,13 @@
 using System.Numerics;
+using System.Text;
 using DenOfIz;
 
 namespace NiziKit.UI;
 
-public class Label : Widget
+public class Label : Widget, ISelectableText
 {
     private uint _textId;
+    private TextSelection? _selection;
 
     public Label(string text, TextStyle style = default)
     {
@@ -26,11 +28,42 @@ public class Label : Widget
     public UITextAlign Align { get; set; }
     public int MaxLines { get; set; }
 
+    /// <summary>
+    /// Lets the user select the text: drag, double click for a word, triple click for all, Shift+click to extend. Cmd+C (Ctrl+C) copies and
+    /// Cmd+A (Ctrl+A) selects all after a press in the text, unless the focused widget takes the key. The text takes no focus or Tab stop, and
+    /// a press anywhere else clears the selection.
+    /// </summary>
+    public bool Selectable { get; set; }
+
+    /// <summary>
+    /// The selected text, empty without a selection.
+    /// </summary>
+    public string SelectedText => _selection?.Text ?? "";
+
     private protected virtual UITextWrap WrapMode => UITextWrap.None;
+
+    internal override bool Interactive => base.Interactive || Selectable;
 
     private bool NeedsBox => Width.Type != UIValueType.Auto || Height.Type != UIValueType.Auto || MinWidth.Type != UIValueType.Auto ||
                              MaxWidth.Type != UIValueType.Auto || Flex > 0 || Float != null || AlignSelf != UIAlignSelf.Auto ||
-                             Margin is not { Left: 0, Top: 0, Right: 0, Bottom: 0 } || Clickable;
+                             Margin is not { Left: 0, Top: 0, Right: 0, Bottom: 0 } || Clickable || Selectable;
+
+    int ISelectableText.BlockCount => 1;
+
+    ReadOnlySpan<byte> ISelectableText.Block(int index)
+    {
+        return Encoding.UTF8.GetBytes(Text.ToString());
+    }
+
+    uint ISelectableText.TextId(int block)
+    {
+        return _textId;
+    }
+
+    (int Block, int Offset) ISelectableText.OffsetAt(Vector2 point)
+    {
+        return (0, (int)Ui.Native.GetTextOffsetAtPoint(_textId, point));
+    }
 
     protected internal override void Describe(UiWidgetInfo info)
     {
@@ -38,6 +71,21 @@ public class Label : Widget
         if (MaxLines > 0)
         {
             info.Set("maxLines", MaxLines);
+        }
+
+        TextSelection.Describe(info, Selectable, _selection);
+    }
+
+    internal override void Dispatch()
+    {
+        base.Dispatch();
+        if (Selectable && EnabledNow)
+        {
+            (_selection ??= new TextSelection(this)).Update(in State);
+        }
+        else
+        {
+            _selection?.Clear();
         }
     }
 
@@ -72,6 +120,16 @@ public class Label : Widget
         var box = Desc();
         box.Layout.Direction = UIDirection.Column;
         box.Layout.Justify = UIJustify.Center;
+        if (Selectable && !Clickable)
+        {
+            box.Cursor = SystemCursor.Text;
+        }
+
+        if (_selection is { HasSelection: true } selection && selection.Range(0, Encoding.UTF8.GetByteCount(text), out var start, out var end))
+        {
+            desc.Selection = new UITextSelection { Start = start, End = end, Color = theme.Selection };
+        }
+
         Ui.Open(in box);
         OfferTooltip();
         if (_textId == 0)

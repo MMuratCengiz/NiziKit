@@ -87,6 +87,7 @@ internal struct BlockBox
     public UIValue MaxWidth;
     public bool Row;
     public float Flex;
+    public bool ScrollX;
 }
 
 internal abstract class MarkupBlock
@@ -97,6 +98,7 @@ internal abstract class MarkupBlock
 
 internal sealed class MarkupParagraph : MarkupBlock
 {
+    public int Ordinal;
     public byte[] Utf8 = [];
     public List<MarkupRun> Runs = new();
     public float Size;
@@ -370,15 +372,17 @@ internal sealed class MarkupBuilder
 {
     private readonly MarkupDocument _document = new();
     private readonly float _base;
+    private readonly PreOverflow _pre;
     private readonly StringBuilder _text = new();
     private readonly List<(int CharEnd, InlineStyle Style, MarkupImage? Image)> _runs = new();
     private bool _lastSpace = true;
     private bool _wordStart = true;
     private int _nextIndex;
 
-    private MarkupBuilder(float baseSize)
+    private MarkupBuilder(float baseSize, PreOverflow pre)
     {
         _base = baseSize;
+        _pre = pre;
     }
 
     private struct BlockContext
@@ -387,12 +391,12 @@ internal sealed class MarkupBuilder
         public UITextAlign Align;
         public float LineHeight;
         public bool Pre;
-        public bool NoWrap;
+        public UITextWrap Wrap;
     }
 
-    public static MarkupDocument Build(string markup, float baseSize)
+    public static MarkupDocument Build(string markup, float baseSize, PreOverflow pre)
     {
-        var builder = new MarkupBuilder(baseSize);
+        var builder = new MarkupBuilder(baseSize, pre);
         var root = MarkupParser.Parse(markup);
         var context = new BlockContext { Inline = new InlineStyle { Size = baseSize, Link = -1 }, Align = UITextAlign.Start };
         builder.BuildChildren(root, builder._document.Root, context);
@@ -541,6 +545,7 @@ internal sealed class MarkupBuilder
                 inline.Mono = true;
                 inline.Size = em * 0.92f;
                 context.Pre = true;
+                context.Wrap = _pre == PreOverflow.Wrap ? UITextWrap.Anywhere : UITextWrap.Newlines;
                 break;
             case "hr":
                 box.MarginTop = box.MarginBottom = em * 0.9f;
@@ -574,6 +579,7 @@ internal sealed class MarkupBuilder
         context.Inline = inline;
         ApplyBlockStyle(style, ref box, ref context);
         ApplyAttributes(node, ref context);
+        box.ScrollX = tag == "pre" && _pre == PreOverflow.Scroll && context.Wrap is UITextWrap.Newlines or UITextWrap.None;
 
         if (tag == "hr")
         {
@@ -850,7 +856,7 @@ internal sealed class MarkupBuilder
             Color = context.Inline.Color,
             Align = context.Align,
             LineHeight = context.LineHeight,
-            Wrap = context.NoWrap ? UITextWrap.None : context.Pre ? UITextWrap.Newlines : UITextWrap.Words
+            Wrap = context.Wrap
         };
         var charStart = 0;
         var byteEnd = 0;
@@ -869,6 +875,7 @@ internal sealed class MarkupBuilder
         }
 
         paragraph.Native = new UITextRun[paragraph.Runs.Count];
+        paragraph.Ordinal = _document.Paragraphs.Count;
         container.Children.Add(paragraph);
         _document.Paragraphs.Add(paragraph);
         BeginParagraph();
@@ -979,7 +986,13 @@ internal sealed class MarkupBuilder
                     break;
                 case "white-space":
                     context.Pre = value is "pre" or "pre-wrap" or "pre-line" or "break-spaces";
-                    context.NoWrap = value is "nowrap" or "pre";
+                    context.Wrap = value switch
+                    {
+                        "nowrap" => UITextWrap.None,
+                        "pre" => UITextWrap.Newlines,
+                        "pre-wrap" or "break-spaces" => UITextWrap.Anywhere,
+                        _ => UITextWrap.Words
+                    };
                     break;
             }
         }
@@ -1294,7 +1307,7 @@ internal static class Colors
     {
         ["--text"] = Color.Text, ["--muted"] = Color.TextMuted, ["--accent"] = Color.Accent, ["--danger"] = Color.Danger,
         ["--surface"] = Color.Surface, ["--surface-alt"] = Color.SurfaceAlt, ["--border"] = Color.Border, ["--background"] = Color.Background,
-        ["--accent-soft"] = Color.AccentSoft, ["--selection"] = Color.Selection
+        ["--accent-soft"] = Color.AccentSoft, ["--selection"] = Color.Selection, ["--success"] = Color.Success, ["--warning"] = Color.Warning
     };
 
     public static bool TryParse(string value, out Color color)

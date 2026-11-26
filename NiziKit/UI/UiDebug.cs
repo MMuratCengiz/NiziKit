@@ -21,6 +21,12 @@ public static partial class UiDebug
     private static float _displayScale = 1;
     private static Vector2 _pointer = new(-1);
 
+    /// <summary>
+    /// Raised with the frame time at the start of every headless frame, before the UI updates, for the work an app's
+    /// <see cref="Game.Update"/> would do, such as draining queues. Not raised with a window.
+    /// </summary>
+    public static event Action<float>? OnFrame;
+
     public static bool IsHeadless => _session != null;
 
     public static bool IsAnimating => Ui.IsInitialized && (Ui.Native.IsAnimating || Images.Loading || Pending.Count > 0);
@@ -57,6 +63,7 @@ public static partial class UiDebug
         RequireHeadless();
         for (var i = 0; i < frames; i++)
         {
+            OnFrame?.Invoke(deltaTime);
             GraphicsContext.BeginFrame();
             Ui.Update(deltaTime);
         }

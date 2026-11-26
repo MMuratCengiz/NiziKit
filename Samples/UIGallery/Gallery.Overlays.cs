@@ -1,10 +1,14 @@
+using System.Collections.Concurrent;
 using System.Numerics;
 
 namespace UIGallery;
 
 internal sealed partial class Gallery
 {
+    private readonly ConcurrentQueue<string> _jobUpdates = new();
     private string _action = "none";
+    private string _job = "not started";
+    private bool _jobRunning;
 
     public Menu ContextMenu { get; private set; } = null!;
     public Dialog Dialog { get; private set; } = null!;
@@ -91,7 +95,42 @@ internal sealed partial class Gallery
                         Tooltip = "Panels take tooltips too",
                         Children = [new Icon(FontAwesome.CircleQuestion) { Color = Color.TextMuted }, new Label("A plain row")]
                     },
-                    new Button("Notify", FontAwesome.Bell) { OnClick = () => Ui.Notify($"Saved at {DateTime.Now:HH:mm:ss}") })));
+                    new Button("Notify", FontAwesome.Bell) { OnClick = () => Ui.Notify($"Saved at {DateTime.Now:HH:mm:ss}") },
+                    new Button("Notify for 8 s") { OnClick = () => Ui.Notify("This one stays for 8 seconds", 8, Color.Warning) },
+                    new Button("Background job", FontAwesome.Play) { Name = "overlays.job", OnClick = StartJob, Enabled = Bind(() => !_jobRunning) }),
+                new Label(() => $"job: {_job}", TextStyle.Small) { Name = "overlays.job.status" },
+                Caption("The job posts progress from another thread; the game's Update, or UiDebug.OnFrame when headless, drains it.")));
+    }
+
+    public void Pump()
+    {
+        while (_jobUpdates.TryDequeue(out var update))
+        {
+            _job = update;
+        }
+
+        if (_jobRunning && _job == "done")
+        {
+            _jobRunning = false;
+            Ui.Notify("Background job finished", 6, Color.Success);
+        }
+    }
+
+    private void StartJob()
+    {
+        _jobRunning = true;
+        Task.Run(() =>
+        {
+            for (var step = 1; step <= 5; step++)
+            {
+                Thread.Sleep(40);
+                _jobUpdates.Enqueue($"step {step} of 5");
+                Game.RequestFrame();
+            }
+
+            _jobUpdates.Enqueue("done");
+            Game.RequestFrame();
+        });
     }
 
     private Dialog BuildDialog()

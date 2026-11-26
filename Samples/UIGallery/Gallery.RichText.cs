@@ -64,17 +64,39 @@ internal sealed partial class Gallery
         <img src="https://picsum.photos/id/1015/480/270" width="480" style="border-radius: 10px">
         """;
 
+    private const string CodeMarkup =
+        """
+        <p>A <code>pre</code> block with a line longer than the card:</p>
+        <pre>git log --oneline --graph --decorate -- NiziKit/UI/RichText.cs NiziKit/UI/Markup.cs
+          dotnet build NiziKit.slnx</pre>
+        """;
+
+    private const string BuildMarkup =
+        """
+        <h3 style="margin-top: 0">Build 1.2.6</h3>
+        <p>Drag across paragraphs to select. <b>Bold</b>, <code>code</code> and <a href="https://example.com">links</a> copy as plain text,
+        and a link does not open when the drag that selected text ends on it.</p>
+        <ul>
+          <li><span style="color: var(--success)">214 passed</span></li>
+          <li><span style="color: var(--warning)">3 skipped</span></li>
+          <li><span style="color: var(--danger)">0 failed</span></li>
+        </ul>
+        <pre>dotnet test --no-build --logger "console;verbosity=normal"</pre>
+        """;
+
     private string _markup = LiveMarkup;
     private string _lastLink = "none yet";
 
     public ScrollView RichTextScroll { get; private set; } = null!;
     public RichText ChatText { get; private set; } = null!;
     public RichText LiveText { get; private set; } = null!;
+    public RichText BuildText { get; private set; } = null!;
 
     private Widget RichTextPage()
     {
         ChatText = new RichText(ChatMarkup) { OnLink = Link };
         LiveText = new RichText(() => _markup) { OnLink = Link };
+        BuildText = new RichText(BuildMarkup) { Name = "rich.select", Selectable = true, PreOverflow = PreOverflow.Wrap, OnLink = Link };
         return RichTextScroll = Page(
             Card("Live markup", "Edit the HTML on the left. Unknown tags render their text and unknown CSS is ignored.", 0,
                 new Row
@@ -100,6 +122,17 @@ internal sealed partial class Gallery
                 Card("Chat log", "Inline icons, colours and links in one wrapped paragraph.", 300, ChatText),
                 Card("Item tooltip", "Headings, a line break, a rule and theme colours.", 300, new RichText(ItemMarkup)),
                 Card("Patch notes", "A list with an inline image and a simple table.", 300, new RichText(NotesMarkup))),
+            Grid(
+                Card("PreOverflow.Clip", "The default: the block cuts long lines off.", 260, new RichText(CodeMarkup) { Name = "rich.pre.clip" }),
+                Card("PreOverflow.Wrap", "Long lines wrap; newlines and spaces stay.", 260,
+                    new RichText(CodeMarkup) { Name = "rich.pre.wrap", PreOverflow = PreOverflow.Wrap }),
+                Card("PreOverflow.Scroll", "The block scrolls sideways with its scrollbar or the wheel.", 260,
+                    new RichText(CodeMarkup) { Name = "rich.pre.scroll", PreOverflow = PreOverflow.Scroll }),
+                Card("white-space: pre-wrap", "The CSS on one block wraps it without the property.", 260,
+                    new RichText(CodeMarkup.Replace("<pre>", "<pre style=\"white-space: pre-wrap\">")) { Name = "rich.pre.css" })),
+            Card("Selectable rich text", "Selectable = true; SelectedText is the plain text, one line per paragraph. Theme colors include --success and --warning.", 0,
+                BuildText,
+                new Paragraph(() => $"selected \"{BuildText.SelectedText}\"", TextStyle.Small) { Name = "rich.select.readout" }),
             Card("Images", "Local paths and URLs load in the background; no resolver needed.", 0, new RichText(ImageMarkup)));
     }
 

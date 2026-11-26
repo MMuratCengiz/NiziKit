@@ -4,6 +4,8 @@ namespace NiziKit.Application.Windowing;
 
 public sealed class AppWindow : IDisposable
 {
+    private string _title;
+
     public uint Width { get; private set; }
     public uint Height { get; private set; }
     public float DisplayScale { get; private set; } = 1f;
@@ -13,8 +15,20 @@ public sealed class AppWindow : IDisposable
 
     public Window NativeWindow { get; }
 
+    public string Title
+    {
+        get => _title;
+        set
+        {
+            _title = value;
+            using var title = new StringView.Pinned(value);
+            NativeWindow.SetTitle(title);
+        }
+    }
+
     public AppWindow(string title, uint width, uint height, WindowFlags flags)
     {
+        _title = title;
         NativeWindow = new Window(new WindowDesc
         {
             Width = (int)width,
