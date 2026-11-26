@@ -22,6 +22,8 @@ internal static class Images
     private static readonly ConcurrentQueue<(Entry Entry, TextureData Data)> Decoded = new();
     private static readonly Lazy<HttpClient> Http = new(() => new HttpClient { Timeout = TimeSpan.FromSeconds(30) });
 
+    internal static bool Loading => !Decoded.IsEmpty || Entries.Values.Any(e => e.Texture == null && !e.Failed);
+
     internal static Entry Get(string source)
     {
         if (!Entries.TryGetValue(source, out var entry))

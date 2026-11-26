@@ -390,6 +390,14 @@ public class Tabs<T> : Widget
     public Bound<T> Selected { get; set; }
     public Action<T>? OnChange { get; set; }
 
+    protected internal override void Describe(UiWidgetInfo info)
+    {
+        var index = SelectedIndex;
+        info.Value = Selected.Value?.ToString();
+        info.Text = index >= 0 ? Pages[index].Title : null;
+        info.Set("pages", Pages.Select(p => p.Title).ToArray());
+    }
+
     public int SelectedIndex
     {
         get

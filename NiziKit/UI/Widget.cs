@@ -70,6 +70,14 @@ public abstract class Widget
 
     internal virtual bool AcceptsTextInput => false;
 
+    internal bool IsClickable => Clickable;
+
+    internal bool IsFocusable => Focusable;
+
+    protected internal virtual void Describe(UiWidgetInfo info)
+    {
+    }
+
     internal bool Consumed => _consumedFrame == Ui.FrameNumber;
 
     internal bool BuiltLastFrame { get; private set; }

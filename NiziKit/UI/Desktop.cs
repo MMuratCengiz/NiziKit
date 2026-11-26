@@ -188,6 +188,16 @@ public class FloatingWindow : Widget
     public bool Closable { get; set; } = true;
     public Action? OnClose { get; set; }
 
+    protected internal override void Describe(UiWidgetInfo info)
+    {
+        info.Text = Title;
+        info.Set("open", IsOpen);
+        if (Collapsed)
+        {
+            info.Set("collapsed", true);
+        }
+    }
+
     public Rectangle Rect
     {
         get => _rect;

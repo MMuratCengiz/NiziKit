@@ -10,6 +10,16 @@ The NuGet package makes the `DenOfIz` and `NiziKit.*` namespaces ambient in cons
 
 Input: `NiziKit.Inputs.Input` only tracks per-frame edges (`WasKeyPressed`, `WasMouseButtonReleased`, `MouseDelta`, `MouseScroll`). Held state, mouse position, cursor and controllers come straight from `DenOfIz.InputSystem` (the instance is on `Game.InputSystem`).
 
+## UI debugging and headless runs
+
+`UiDebug` inspects and drives the UI: `Snapshot()` returns the laid out widget tree with rects in points, values, state and layout issues (overflow, clipping, truncated text, overlaps, covered or empty click targets), `Capture(path)` writes a PNG, and `Click`, `Type`, `Key`, `Drag` and `Scroll` inject input. An app opts into a windowless mode with `if (UiDebug.Run(args, () => new MyView())) return;`:
+
+```bash
+dotnet run --project Samples/UIGallery -- --ui-debug --size 1360x900 --out out        # out/ui.txt, ui.json, ui.png
+dotnet run --project Samples/UIGallery -- --ui-debug --run "click Lists; scroll ListView 5; find ListView; capture out/list.png"
+dotnet run --project Samples/UIGallery -- --ui-debug --script -                       # commands from stdin, `help` lists them
+```
+
 ## Demos
 
 - `Pong` — a small 2D game: one pipeline, a camera, a handful of quads and a score table.

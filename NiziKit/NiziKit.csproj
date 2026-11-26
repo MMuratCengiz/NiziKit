@@ -20,7 +20,7 @@
     </PropertyGroup>
 
     <ItemGroup Condition="'$(DenOfIzSource)' == 'NuGet'">
-        <PackageReference Include="DenOfIzGraphics" Version="1.2.2" />
+        <PackageReference Include="DenOfIzGraphics" Version="1.2.4" />
     </ItemGroup>
 
     <ItemGroup Condition="'$(DenOfIzSource)' == 'Local'">

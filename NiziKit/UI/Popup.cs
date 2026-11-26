@@ -36,6 +36,15 @@ public class Popup : Panel
     internal Popup? ParentPopup { get; private set; }
     internal int ZIndex { get; set; }
 
+    protected internal override void Describe(UiWidgetInfo info)
+    {
+        info.Set("open", IsOpen);
+        if (Modal)
+        {
+            info.Set("modal", true);
+        }
+    }
+
     internal override bool Interactive => true;
 
     public void Show(Widget anchor, UIAnchor targetAnchor = UIAnchor.BottomLeft, UIAnchor anchorPoint = UIAnchor.TopLeft, Vector2 offset = default)
@@ -347,6 +356,20 @@ public class MenuItem : Widget
     public string? Icon { get; set; }
     public string? Shortcut { get; set; }
     public Prop<bool> Checked { get; set; }
+
+    protected internal override void Describe(UiWidgetInfo info)
+    {
+        info.Text = Text.ToString();
+        if (Checked.IsBound || Checked.Value)
+        {
+            info.Value = Checked.Value;
+        }
+
+        if (Shortcut != null)
+        {
+            info.Set("shortcut", Shortcut);
+        }
+    }
 
     protected override bool Clickable => true;
 

@@ -32,6 +32,15 @@ public class Label : Widget
                              MaxWidth.Type != UIValueType.Auto || Flex > 0 || Float != null || AlignSelf != UIAlignSelf.Auto ||
                              Margin is not { Left: 0, Top: 0, Right: 0, Bottom: 0 } || Clickable;
 
+    protected internal override void Describe(UiWidgetInfo info)
+    {
+        info.Text = Text.ToString();
+        if (MaxLines > 0)
+        {
+            info.Set("maxLines", MaxLines);
+        }
+    }
+
     internal override void Render()
     {
         var theme = Ui.Theme;
@@ -109,6 +118,11 @@ public sealed class Icon : Widget
     public float Size { get; set; }
     public ColorProp Color { get; set; }
 
+    protected internal override void Describe(UiWidgetInfo info)
+    {
+        info.Set("glyph", UiWidgetInfo.Glyph(_source?.Invoke() ?? _glyph));
+    }
+
     internal override void Render()
     {
         if (!FontAwesome.IsInitialized)
@@ -159,6 +173,12 @@ public sealed class Image : Widget
     public Color HoverOverlay { get; set; }
 
     internal override bool Interactive => base.Interactive || HoverOverlay.IsSet;
+
+    protected internal override void Describe(UiWidgetInfo info)
+    {
+        info.Set("loaded", Source.Value != null);
+        info.Set("fit", Fit);
+    }
 
     internal override void Render()
     {

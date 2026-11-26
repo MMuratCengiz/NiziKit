@@ -71,6 +71,11 @@ public sealed class RichText : Widget
         }
     }
 
+    protected internal override void Describe(UiWidgetInfo info)
+    {
+        info.Text = Markup.Value;
+    }
+
     internal override void Render()
     {
         var theme = Ui.Theme;

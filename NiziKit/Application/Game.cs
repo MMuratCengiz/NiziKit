@@ -153,7 +153,7 @@ public class Game : IDisposable
         ShutdownEngine();
     }
 
-    private static void InitializeEngine()
+    internal static void InitializeEngine()
     {
         if (_engineInitialized)
         {
@@ -166,7 +166,7 @@ public class Game : IDisposable
         _engineInitialized = true;
     }
 
-    private static void ShutdownEngine()
+    internal static void ShutdownEngine()
     {
         if (!_engineInitialized)
         {

@@ -56,6 +56,12 @@ public static partial class Ui
 
     internal static bool IsInitialized => _ui != null;
 
+    internal static bool Headless { get; set; }
+
+    internal static string? ShownTooltip => _tooltipTarget != 0 && _tooltipTime >= TooltipDelay ? _tooltipText : null;
+
+    internal static IEnumerable<string> NotificationTexts => Notifications.Select(n => n.Text);
+
     internal static List<Widget> Built => _built;
 
     internal static int FrameNumber { get; private set; }
@@ -146,7 +152,11 @@ public static partial class Ui
 
         if (_textInputActive)
         {
-            InputSystem.StopTextInput();
+            if (!Headless)
+            {
+                InputSystem.StopTextInput();
+            }
+
             _textInputActive = false;
         }
 
@@ -188,6 +198,7 @@ public static partial class Ui
     {
         var ui = Native;
         Images.Upload();
+        UiDebug.DispatchQueued();
         ui.BeginFrame(deltaTime);
         Fonts.ReleaseRemoved();
         DeltaTime = deltaTime;
@@ -217,11 +228,11 @@ public static partial class Ui
         if (wantsText != _textInputActive)
         {
             _textInputActive = wantsText;
-            if (wantsText)
+            if (!Headless && wantsText)
             {
                 InputSystem.StartTextInput();
             }
-            else
+            else if (!Headless)
             {
                 InputSystem.StopTextInput();
             }
@@ -230,7 +241,10 @@ public static partial class Ui
         if (ui.Cursor != _cursor)
         {
             _cursor = ui.Cursor;
-            InputSystem.SetCursor(_cursor);
+            if (!Headless)
+            {
+                InputSystem.SetCursor(_cursor);
+            }
         }
     }
 

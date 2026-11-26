@@ -28,6 +28,25 @@ public class Button : Widget
     public Bound<bool>? Checked { get; set; }
     public Action<bool>? OnChange { get; set; }
 
+    protected internal override void Describe(UiWidgetInfo info)
+    {
+        info.Text = Text.ToString();
+        if (Checked is { } current)
+        {
+            info.Value = current.Value;
+        }
+
+        if (Icon != null)
+        {
+            info.Set("icon", UiWidgetInfo.Glyph(Icon));
+        }
+
+        if (Tone != Tone.Secondary)
+        {
+            info.Set("tone", Tone);
+        }
+    }
+
     protected override bool Clickable => true;
     protected override bool KeepsSize => true;
 
@@ -139,6 +158,12 @@ public class Checkbox : Widget
     public Action<bool>? OnChange { get; set; }
     public float BoxSize { get; set; } = 16;
 
+    protected internal override void Describe(UiWidgetInfo info)
+    {
+        info.Text = Text;
+        info.Value = Checked.Value;
+    }
+
     protected override bool Clickable => true;
     protected override bool KeepsSize => true;
 
@@ -204,6 +229,12 @@ public class Switch : Widget
     public string Text { get; set; }
     public Bound<bool> On { get; set; }
     public Action<bool>? OnChange { get; set; }
+
+    protected internal override void Describe(UiWidgetInfo info)
+    {
+        info.Text = Text;
+        info.Value = On.Value;
+    }
 
     protected override bool Clickable => true;
     protected override bool KeepsSize => true;
@@ -291,6 +322,17 @@ public class Slider : Widget
     public float TrackThickness { get; set; } = 6;
 
     public float Current => _dragging && !Live ? _dragValue : Value.Value;
+
+    protected internal override void Describe(UiWidgetInfo info)
+    {
+        info.Value = Current;
+        info.Set("min", Min);
+        info.Set("max", Max);
+        if (Step > 0)
+        {
+            info.Set("step", Step);
+        }
+    }
 
     protected override bool Focusable => true;
     internal override bool Interactive => true;
@@ -554,6 +596,15 @@ public class Dropdown : Widget
 
     public bool IsOpen => _list.IsOpen;
 
+    protected internal override void Describe(UiWidgetInfo info)
+    {
+        var selected = Selected.Value;
+        info.Value = selected;
+        info.Text = selected >= 0 && selected < Items.Count ? Items[selected] : Placeholder;
+        info.Set("items", Items);
+        info.Set("open", IsOpen);
+    }
+
     protected override bool Clickable => true;
     protected override bool KeepsSize => true;
 
@@ -779,6 +830,11 @@ public class Meter : Widget
     public ColorProp Color { get; set; }
     public ColorProp SecondaryColor { get; set; }
     public ColorProp Track { get; set; }
+
+    protected internal override void Describe(UiWidgetInfo info)
+    {
+        info.Value = Value.Value;
+    }
 
     internal override void Render()
     {

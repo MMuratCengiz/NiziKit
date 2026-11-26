@@ -55,6 +55,26 @@ public abstract class TextInput : Widget
         Changed();
     }
 
+    protected internal override void Describe(UiWidgetInfo info)
+    {
+        info.Text = Text.Value;
+        info.Set("caret", Caret);
+        if (Placeholder.Length > 0)
+        {
+            info.Set("placeholder", Placeholder);
+        }
+
+        if (HasSelection)
+        {
+            info.Set("selection", new[] { SelectionStart, SelectionEnd });
+        }
+
+        if (ReadOnly)
+        {
+            info.Set("readOnly", true);
+        }
+    }
+
     internal TextEditor Editor { get; } = new();
 
     private protected uint TextId => _textId != 0 ? _textId : _textId = Ui.Id(Id, 2);
