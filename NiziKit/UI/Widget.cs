@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Numerics;
+using System.Text;
 using DenOfIz;
 using DzUI = DenOfIz.UI;
 
@@ -68,7 +69,19 @@ public abstract class Widget
     internal virtual bool Interactive => Clickable || Focusable || OnRightClick != null || ContextMenu != null || OnDrag != null || Tooltip.IsBound ||
                                          Tooltip.Value != null;
 
-    internal virtual bool AcceptsTextInput => false;
+    /// <summary>
+    /// Makes a focusable widget take typed text: while it has focus the OS text input runs and committed text, IME results included, arrives in
+    /// <see cref="OnTextInput"/>. The key press reaches <see cref="OnKeyDown"/> as a separate event and the text comes whatever it returned, so
+    /// handle a printable key in one of the two. The IME's composition in progress is not reported. False by default; TextField and TextArea
+    /// take text unless read only.
+    /// </summary>
+    protected internal virtual bool AcceptsTextInput => false;
+
+    /// <summary>
+    /// Where the OS places IME candidate windows while the widget takes text input, in points in the space of <see cref="Bounds"/>. Read once per
+    /// frame while the widget has focus and sent to the OS when it changes. Null, the default, leaves the placement to the OS.
+    /// </summary>
+    protected internal virtual Rectangle? TextInputRect => null;
 
     internal bool IsClickable => Clickable;
 
@@ -81,6 +94,10 @@ public abstract class Widget
     internal bool Consumed => _consumedFrame == Ui.FrameNumber;
 
     internal bool BuiltLastFrame { get; private set; }
+
+    internal bool BuiltThisFrame => _builtFrame == Ui.FrameNumber;
+
+    internal virtual bool IsPlaceholder => false;
 
     internal void BuildFrame()
     {
@@ -162,8 +179,17 @@ public abstract class Widget
         return false;
     }
 
-    internal virtual void OnTextInput(ReadOnlySpan<byte> utf8)
+    /// <summary>
+    /// Committed text for the focused widget when <see cref="AcceptsTextInput"/> is true and the widget is enabled: never empty, on the main
+    /// thread from <see cref="Ui.HandleEvent"/>. TextField and TextArea insert it themselves and do not call this.
+    /// </summary>
+    protected virtual void OnTextInput(string text)
     {
+    }
+
+    internal virtual void ReceiveText(ReadOnlySpan<byte> utf8)
+    {
+        OnTextInput(Encoding.UTF8.GetString(utf8));
     }
 
     internal void ConsumeAncestors()

@@ -41,6 +41,7 @@ public static partial class Ui
     private static Widget? _frameFocusedWidget;
     private static SystemCursor _cursor;
     private static bool _textInputActive;
+    private static Rectangle _textInputRect;
     private static float _scale = 1;
     private static UIDebugFlagBits _debugFlags;
     private static List<Widget> _built = new();
@@ -111,13 +112,15 @@ public static partial class Ui
 
     public static bool WantsTextInput => _textInputActive;
 
-    internal static bool IsAnimating => _ui is { IsAnimating: true };
+    internal static bool IsAnimating => _ui is { IsAnimating: true } || TextSelection.AutoScrolling;
 
     internal static float NextTimer
     {
         get
         {
-            var next = _focusedWidget is TextInput { IsFocused: true, ReadOnly: false } input ? input.Editor.NextBlink : float.PositiveInfinity;
+            var next = _focusedWidget is TextInput { IsFocused: true, ReadOnly: false, CaretBlink: true } input
+                ? input.Editor.NextBlink
+                : float.PositiveInfinity;
             if (_tooltipTarget != 0 && _tooltipTime < TooltipDelay)
             {
                 next = MathF.Min(next, TooltipDelay - _tooltipTime);
@@ -251,6 +254,7 @@ public static partial class Ui
         if (wantsText != _textInputActive)
         {
             _textInputActive = wantsText;
+            _textInputRect = default;
             if (!Headless && wantsText)
             {
                 InputSystem.StartTextInput();
@@ -259,6 +263,14 @@ public static partial class Ui
             {
                 InputSystem.StopTextInput();
             }
+        }
+
+        if (wantsText && !Headless && _focusedWidget!.TextInputRect is { } area && area != _textInputRect)
+        {
+            _textInputRect = area;
+            var scale = PixelsPerPoint / GraphicsContext.Window.GetPixelDensity();
+            InputSystem.SetTextInputRect(GraphicsContext.Window, (int)(area.X * scale), (int)(area.Y * scale), (int)MathF.Ceiling(area.Width * scale),
+                (int)MathF.Ceiling(area.Height * scale));
         }
 
         if (ui.Cursor != _cursor)
@@ -586,7 +598,7 @@ public static partial class Ui
             return false;
         }
 
-        focused.OnTextInput(new ReadOnlySpan<byte>((void*)text.Chars, (int)text.NumChars));
+        focused.ReceiveText(new ReadOnlySpan<byte>((void*)text.Chars, (int)text.NumChars));
         return true;
     }
 }

@@ -26,6 +26,12 @@ public abstract class TextInput : Widget
     /// </summary>
     public bool Stretch { get; set; }
 
+    /// <summary>
+    /// Blinks the caret while the input has focus, on by default. Off, the caret stays drawn, and a focused input wakes a
+    /// <see cref="NiziKit.Application.RenderMode.OnDemand"/> app only for input instead of twice a second.
+    /// </summary>
+    public bool CaretBlink { get; set; } = true;
+
     public bool ReadOnly
     {
         get => Editor.ReadOnly;
@@ -88,7 +94,7 @@ public abstract class TextInput : Widget
     protected override bool Focusable => true;
     protected override bool KeepsSize => true;
     internal override bool Interactive => true;
-    internal override bool AcceptsTextInput => !Editor.ReadOnly;
+    protected internal override bool AcceptsTextInput => !Editor.ReadOnly;
 
     protected internal override bool OnKeyDown(in KeyboardEventData key)
     {
@@ -113,7 +119,7 @@ public abstract class TextInput : Widget
         return key.KeyCode is not (KeyCode.Tab or KeyCode.Escape) and not (>= KeyCode.F1 and <= KeyCode.F12);
     }
 
-    internal override void OnTextInput(ReadOnlySpan<byte> utf8)
+    internal override void ReceiveText(ReadOnlySpan<byte> utf8)
     {
         if (Editor.Insert(utf8))
         {
@@ -216,7 +222,7 @@ public abstract class TextInput : Widget
         desc.Selection.End = selectionEnd;
         desc.Selection.Color = focused ? theme.Selection : theme.InactiveSelection;
         desc.Caret = caret;
-        desc.CaretColor = focused && !ReadOnly && Editor.CaretVisible ? theme.Text : default;
+        desc.CaretColor = focused && !ReadOnly && (!CaretBlink || Editor.CaretVisible) ? theme.Text : default;
         return desc;
     }
 

@@ -144,7 +144,9 @@ internal sealed partial class Gallery
                     new Label("Bold", new TextStyle { Weight = FontWeight.Bold }) { Name = "text.weight.bold" },
                     new Label("Mono 0O1lI", new TextStyle { Mono = true }) { Name = "text.mono" },
                     new Label("Mono bold", new TextStyle { Mono = true, Weight = FontWeight.Bold }) { Name = "text.mono.bold" }),
-                new RichText("<p>RichText follows both: <b>bold</b> takes the registered bold face, <code>code</code> the mono font.</p>")));
+                new RichText("<p>RichText follows both: <b>bold</b> takes the registered bold face, <code>code</code> the mono font.</p>")),
+            ScopeCard(),
+            TypingCard());
     }
 
     private Widget SelectableCard()

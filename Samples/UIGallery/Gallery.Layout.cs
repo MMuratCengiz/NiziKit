@@ -10,8 +10,12 @@ internal sealed partial class Gallery
 
     private static readonly string[] Tags = ["flexbox", "yoga", "wrap", "gap", "line gap", "retained", "bindings", "points", "percent", "spacer", "float", "visible", "dividers"];
 
+    private static readonly string[] BorderTabs = ["Agent", "Changes", "Terminal"];
+
     private bool _expanded;
     private bool _listHidden;
+    private int _borderTab;
+    private int _borderRow;
 
     private Widget LayoutPage()
     {
@@ -99,7 +103,64 @@ internal sealed partial class Gallery
                         },
                         GrowBox()
                     ]
-                }));
+                }),
+            BordersCard());
+    }
+
+    private Widget BordersCard()
+    {
+        return Card("Transparent borders",
+            "A Border built with Color.Transparent is set: BorderColor colors its sides and widths, and it takes no space while nothing colors it. " +
+            "Click the tabs and rows. A Border left unset with a BorderColor draws 1 pt on every side.", 0,
+            new Row { Gap = 4, Children = [.. BorderTabs.Select(BorderTab)] },
+            new Row
+            {
+                Gap = 16,
+                Align = UIAlign.Start,
+                Children =
+                [
+                    new Column { Width = 300, Gap = 2, Children = [.. Enumerable.Range(0, 3).Select(BorderRow)] },
+                    new Column
+                    {
+                        Gap = 8,
+                        Children =
+                        [
+                            new Row { Name = "layout.border.unset", Padding = (12, 6), BorderColor = Color.Accent, Children = [Caption("unset Border, BorderColor = Accent")] },
+                            new Row { Name = "layout.border.clear", Padding = (12, 6), Border = Color.Transparent, Children = [Caption("Border = Color.Transparent alone")] }
+                        ]
+                    }
+                ]
+            });
+    }
+
+    private Widget BorderTab(string title, int index)
+    {
+        return new Row
+        {
+            Name = $"layout.border.tab.{index}",
+            Padding = (12, 6),
+            Border = Border.Bottom(Color.Transparent, 2),
+            BorderColor = Bind(() => _borderTab == index ? Color.Accent : Color.Transparent),
+            HoverBackground = Color.Hover,
+            OnClick = () => _borderTab = index,
+            Children = [new Label(title, TextStyle.Sized(13))]
+        };
+    }
+
+    private Widget BorderRow(int index)
+    {
+        return new Row
+        {
+            Name = $"layout.border.row.{index}",
+            Padding = (10, 6),
+            Radius = 3,
+            Border = Border.Left(Color.Transparent, 3),
+            BorderColor = Bind(() => _borderRow == index ? Color.Accent : Color.Transparent),
+            Background = Bind(() => _borderRow == index ? Color.AccentSoft : Color.Transparent),
+            HoverBackground = Color.Hover,
+            OnClick = () => _borderRow = index,
+            Children = [new Label($"Row {index + 1}: Border.Left(Transparent, 3)", TextStyle.Small)]
+        };
     }
 
     private static Widget Swatch()

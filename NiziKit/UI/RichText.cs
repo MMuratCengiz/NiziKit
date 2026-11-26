@@ -64,11 +64,14 @@ public sealed class RichText : Widget, ISelectableText
     public bool Selectable { get; set; }
 
     /// <summary>
-    /// The selected text as plain text, one line per paragraph, without markup, list markers or images. Empty without a selection.
+    /// The selected text as plain text, one line per paragraph, without markup, list markers or images. Empty without a selection. Inside a
+    /// <see cref="SelectionScope"/>, the part of the scope's selection in this widget.
     /// </summary>
-    public string SelectedText => _selection?.Text ?? "";
+    public string SelectedText => _selection?.TextOf(this) ?? "";
 
     internal override bool Interactive => base.Interactive || Selectable;
+
+    Widget ISelectableText.Widget => this;
 
     int ISelectableText.BlockCount => _document?.Paragraphs.Count ?? 0;
 
@@ -119,11 +122,11 @@ public sealed class RichText : Widget, ISelectableText
         _hoveredParagraph = null;
         if (Selectable && EnabledNow)
         {
-            (_selection ??= new TextSelection(this)).Update(in State);
+            _selection?.Update(this, in State);
         }
-        else
+        else if (_selection is { IsScoped: false } selection)
         {
-            _selection?.Clear();
+            selection.Clear();
         }
 
         if (_document == null)
@@ -169,11 +172,16 @@ public sealed class RichText : Widget, ISelectableText
     protected internal override void Describe(UiWidgetInfo info)
     {
         info.Text = Markup.Value;
-        TextSelection.Describe(info, Selectable, _selection);
+        TextSelection.Describe(info, Selectable, SelectedText);
     }
 
     internal override void Render()
     {
+        if (Selectable && EnabledNow)
+        {
+            _selection = TextSelection.Attach(this, _selection);
+        }
+
         var theme = Ui.Theme;
         var text = Style.Resolve(theme, EnabledNow);
         var markup = Markup.Value ?? "";
@@ -358,7 +366,7 @@ public sealed class RichText : Widget, ISelectableText
         desc.Wrap = paragraph.Wrap;
         desc.Align = paragraph.Align;
         desc.LineHeight = paragraph.LineHeight;
-        if (_selection is { HasSelection: true } selection && selection.Range(paragraph.Ordinal, paragraph.Utf8.Length, out var start, out var end))
+        if (_selection is { HasSelection: true } selection && selection.Range(this, paragraph.Ordinal, paragraph.Utf8.Length, out var start, out var end))
         {
             desc.Selection = new UITextSelection { Start = start, End = end, Color = theme.Selection };
         }

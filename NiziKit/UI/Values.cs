@@ -257,17 +257,20 @@ public readonly struct Border
 {
     public readonly Color Color;
     public readonly Edges Width;
+    private readonly bool _set;
 
     public Border(Color color, float width = 1)
     {
         Color = color;
         Width = width;
+        _set = true;
     }
 
     public Border(Color color, Edges width)
     {
         Color = color;
         Width = width;
+        _set = true;
     }
 
     public static Border Top(Color color, float width = 1) => new(color, new Edges(0, width, 0, 0));
@@ -275,7 +278,12 @@ public readonly struct Border
     public static Border Left(Color color, float width = 1) => new(color, new Edges(width, 0, 0, 0));
     public static Border Right(Color color, float width = 1) => new(color, new Edges(0, 0, width, 0));
 
-    public bool IsSet => Color.IsSet;
+    /// <summary>
+    /// False only for <c>default</c>, on which a <see cref="Panel"/> draws no border, or 1 pt on every side when <see cref="Panel.BorderColor"/>
+    /// is set. A border built with <see cref="NiziKit.UI.Color.Transparent"/> is set: it draws nothing itself, its widths apply when the panel
+    /// also has a BorderColor or <see cref="Panel.HoverBorder"/> and under the focus ring, and without those it takes no space.
+    /// </summary>
+    public bool IsSet => _set;
 
     public static implicit operator Border(Color color)
     {

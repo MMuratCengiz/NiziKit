@@ -36,9 +36,9 @@ public class Label : Widget, ISelectableText
     public bool Selectable { get; set; }
 
     /// <summary>
-    /// The selected text, empty without a selection.
+    /// The selected text, empty without a selection. Inside a <see cref="SelectionScope"/>, the part of the scope's selection in this widget.
     /// </summary>
-    public string SelectedText => _selection?.Text ?? "";
+    public string SelectedText => _selection?.TextOf(this) ?? "";
 
     private protected virtual UITextWrap WrapMode => UITextWrap.None;
 
@@ -47,6 +47,8 @@ public class Label : Widget, ISelectableText
     private bool NeedsBox => Width.Type != UIValueType.Auto || Height.Type != UIValueType.Auto || MinWidth.Type != UIValueType.Auto ||
                              MaxWidth.Type != UIValueType.Auto || Flex > 0 || Float != null || AlignSelf != UIAlignSelf.Auto ||
                              Margin is not { Left: 0, Top: 0, Right: 0, Bottom: 0 } || Clickable || Selectable;
+
+    Widget ISelectableText.Widget => this;
 
     int ISelectableText.BlockCount => 1;
 
@@ -73,7 +75,7 @@ public class Label : Widget, ISelectableText
             info.Set("maxLines", MaxLines);
         }
 
-        TextSelection.Describe(info, Selectable, _selection);
+        TextSelection.Describe(info, Selectable, SelectedText);
     }
 
     internal override void Dispatch()
@@ -81,16 +83,21 @@ public class Label : Widget, ISelectableText
         base.Dispatch();
         if (Selectable && EnabledNow)
         {
-            (_selection ??= new TextSelection(this)).Update(in State);
+            _selection?.Update(this, in State);
         }
-        else
+        else if (_selection is { IsScoped: false } selection)
         {
-            _selection?.Clear();
+            selection.Clear();
         }
     }
 
     internal override void Render()
     {
+        if (Selectable && EnabledNow)
+        {
+            _selection = TextSelection.Attach(this, _selection);
+        }
+
         var theme = Ui.Theme;
         var desc = Style.Resolve(theme, EnabledNow);
         if (Size > 0)
@@ -125,7 +132,7 @@ public class Label : Widget, ISelectableText
             box.Cursor = SystemCursor.Text;
         }
 
-        if (_selection is { HasSelection: true } selection && selection.Range(0, Encoding.UTF8.GetByteCount(text), out var start, out var end))
+        if (_selection is { HasSelection: true } selection && selection.Range(this, 0, Encoding.UTF8.GetByteCount(text), out var start, out var end))
         {
             desc.Selection = new UITextSelection { Start = start, End = end, Color = theme.Selection };
         }

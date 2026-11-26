@@ -164,6 +164,12 @@ internal sealed class GalleryGame() : Game(new GameDesc
                     _gallery.QualityDropdown.Open();
                     _scriptPointer = Center(_gallery.PrimaryButton);
                     break;
+                case 2 when _script == 2:
+                    _gallery.TypingPad.Focus();
+                    break;
+                case 2 when _script == 3:
+                    _gallery.SteadyField.Focus();
+                    break;
                 case 2:
                     _gallery.NameBox.Text = "Ada Lovelace";
                     _gallery.NotesArea.Focus();
@@ -193,6 +199,11 @@ internal sealed class GalleryGame() : Game(new GameDesc
                     _gallery.OpenContextMenuAt(new Vector2(button.X + 560, button.Y + 60));
                     break;
             }
+        }
+
+        if (_frameCount == 10 && _printStats)
+        {
+            Console.WriteLine($"focused {Ui.FocusedWidget?.ToString() ?? "nothing"}, OS text input {(Ui.WantsTextInput ? "on" : "off")}");
         }
 
         if (_scriptPointer is { } pointer)

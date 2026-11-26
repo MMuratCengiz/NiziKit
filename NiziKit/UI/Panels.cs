@@ -250,13 +250,13 @@ public class Panel : Widget
                 borderWidth = 1;
             }
         }
-        else if (!border.IsSet && !BorderColor.IsSet)
-        {
-            borderWidth = 0;
-        }
         else if (!border.IsSet)
         {
-            borderWidth = 1;
+            borderWidth = BorderColor.IsSet ? 1 : 0;
+        }
+        else if (!border.Color.IsSet && !BorderColor.IsSet && !HoverBorder.IsSet)
+        {
+            borderWidth = 0;
         }
 
         ref var style = ref desc.Style;

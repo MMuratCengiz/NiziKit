@@ -333,10 +333,14 @@ public class ListView<T> : ScrollView where T : class
         private protected override bool FillsChildren => true;
 
         private float _height;
+        private bool _placeholder;
+
+        internal override bool IsPlaceholder => _placeholder;
 
         internal override void Render()
         {
-            if (Offscreen())
+            _placeholder = Offscreen();
+            if (_placeholder)
             {
                 var placeholder = Desc();
                 placeholder.Layout.Height = _height;
