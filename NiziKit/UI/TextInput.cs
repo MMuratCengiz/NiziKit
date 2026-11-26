@@ -27,6 +27,12 @@ public abstract class TextInput : Widget
     public bool Stretch { get; set; }
 
     /// <summary>
+    /// Space between the border and the text: (10, 7) on a TextField, (10, 8) on a TextArea. Widen a side to keep text clear of a
+    /// widget floated over the input.
+    /// </summary>
+    public Edges Padding { get; set; }
+
+    /// <summary>
     /// Blinks the caret while the input has focus, on by default. Off, the caret stays drawn, and a focused input wakes a
     /// <see cref="NiziKit.Application.RenderMode.OnDemand"/> app only for input instead of twice a second.
     /// </summary>
@@ -247,6 +253,7 @@ public class TextField : TextInput
     public TextField() : base(false)
     {
         Width = 200;
+        Padding = (10, 7);
     }
 
     public bool IsPassword { get; set; }
@@ -306,8 +313,8 @@ public class TextField : TextInput
 
         SyncFromBinding();
         var desc = Chrome();
-        desc.Layout.AlignItems = UIAlign.Center;
-        desc.Layout.Padding = new Edges(10, 7).ToLength();
+        desc.Layout.AlignItems = UIAlign.Stretch;
+        desc.Layout.Padding = Padding.ToLength();
         Ui.Open(in desc);
         OfferTooltip();
         using (Element.Row(_viewportId)
@@ -369,6 +376,7 @@ public class TextArea : TextInput
     public TextArea() : base(true)
     {
         Height = 120;
+        Padding = (10, 8);
     }
 
     public UITextWrap Wrap { get; set; } = UITextWrap.Words;
@@ -380,7 +388,7 @@ public class TextArea : TextInput
         SyncFromBinding();
         var desc = Chrome();
         desc.Layout.Direction = UIDirection.Column;
-        desc.Layout.Padding = new Edges(10, 8).ToLength();
+        desc.Layout.Padding = Padding.ToLength();
         desc.Scroll.OverflowX = UIOverflow.Clip;
         desc.Scroll.OverflowY = UIOverflow.Scroll;
         if (Width.Type == UIValueType.Auto && Flex <= 0)
