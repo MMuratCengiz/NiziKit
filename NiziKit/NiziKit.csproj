@@ -20,7 +20,7 @@
     </PropertyGroup>
 
     <ItemGroup Condition="'$(DenOfIzSource)' == 'NuGet'">
-        <PackageReference Include="DenOfIzGraphics" Version="$(DenOfIzGraphicsVersion)" />
+        <PackageReference Include="DenOfIzGraphics" Version="1.2.2" />
     </ItemGroup>
 
     <ItemGroup Condition="'$(DenOfIzSource)' == 'Local'">
@@ -29,8 +29,8 @@
     </ItemGroup>
 
     <ItemGroup>
-      <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.0" />
-      <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="9.0.0" />
+      <PackageReference Include="Microsoft.Extensions.Logging" Version="11.0.0" />
+      <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="11.0.0" />
     </ItemGroup>
 
     <ItemGroup>

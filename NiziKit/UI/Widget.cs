@@ -72,7 +72,7 @@ public abstract class Widget
 
     internal bool Consumed => _consumedFrame == Ui.FrameNumber;
 
-    internal bool BuiltLastFrame => _builtFrame == Ui.FrameNumber - 1;
+    internal bool BuiltLastFrame { get; private set; }
 
     internal void BuildFrame()
     {
@@ -82,6 +82,7 @@ public abstract class Widget
         }
 
         EnabledNow = Ui.ParentEnabled && Enabled.Value;
+        BuiltLastFrame = _builtFrame == Ui.FrameNumber - 1;
         _builtFrame = Ui.FrameNumber;
         Ui.Built.Add(this);
         Ui.PushEnabled(EnabledNow);

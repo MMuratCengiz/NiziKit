@@ -7,7 +7,8 @@ internal enum GalleryPage
     Lists,
     Overlays,
     Media,
-    Layout
+    Layout,
+    RichText
 }
 
 internal sealed partial class Gallery
@@ -33,7 +34,8 @@ internal sealed partial class Gallery
                 new(GalleryPage.Lists, "Lists", FontAwesome.List, ListsPage()),
                 new(GalleryPage.Overlays, "Overlays", FontAwesome.LayerGroup, OverlaysPage()),
                 new(GalleryPage.Media, "Media", FontAwesome.Image, MediaPage()),
-                new(GalleryPage.Layout, "Layout", FontAwesome.TableCells, LayoutPage())
+                new(GalleryPage.Layout, "Layout", FontAwesome.TableCells, LayoutPage()),
+                new(GalleryPage.RichText, "Rich text", FontAwesome.FileCode, RichTextPage())
             ]
         };
         Root = new Column

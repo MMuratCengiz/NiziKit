@@ -19,6 +19,7 @@ internal sealed class GalleryGame() : Game(new GameDesc { Title = "NiziKit UI Ga
     private bool _patternInShaderState;
     private int _frameCount;
     private Vector2? _scriptPointer;
+    private int _scriptClickFrame = -1;
     private long _statsAllocated;
     private int _statsFrames;
     private double _statsTime;
@@ -31,7 +32,7 @@ internal sealed class GalleryGame() : Game(new GameDesc { Title = "NiziKit UI Ga
         _pattern = PatternTexture.Create(Environment.GetEnvironmentVariable("UIGALLERY_AUTOALIGN") == "1");
         _gallery = new Gallery(() => _visualizer.Texture, _pattern);
         Ui.Root = _gallery.Root;
-        if (_page is >= 1 and <= 6)
+        if (_page >= 1 && _page <= Enum.GetValues<GalleryPage>().Length)
         {
             _gallery.Tabs.Select((GalleryPage)(_page - 1));
         }
@@ -156,6 +157,18 @@ internal sealed class GalleryGame() : Game(new GameDesc { Title = "NiziKit UI Ga
                 case 4 when _script == 2:
                     _gallery.Dialog.Show();
                     break;
+                case 7 when _script == 3:
+                    var live = _gallery.LiveText.Bounds;
+                    _scriptPointer = new Vector2(live.X + 188, live.Y + 211);
+                    _scriptClickFrame = _frameCount + 4;
+                    break;
+                case 7 when _script == 2:
+                    _gallery.RichTextScroll.ScrollToEnd();
+                    break;
+                case 7:
+                    var chat = _gallery.ChatText.Bounds;
+                    _scriptPointer = new Vector2(chat.X + 346, chat.Y + 10);
+                    break;
                 case 4:
                     _gallery.InfoPopup.Show(_gallery.InfoButton);
                     var button = _gallery.InfoButton.Bounds;
@@ -170,6 +183,15 @@ internal sealed class GalleryGame() : Game(new GameDesc { Title = "NiziKit UI Ga
             ev.MouseMotion.X = pointer.X * Ui.PixelsPerPoint;
             ev.MouseMotion.Y = pointer.Y * Ui.PixelsPerPoint;
             Ui.HandleEvent(in ev);
+            if (_frameCount == _scriptClickFrame || _frameCount == _scriptClickFrame + 1)
+            {
+                var click = new Event { Type = _frameCount == _scriptClickFrame ? EventType.MouseButtonDown : EventType.MouseButtonUp };
+                click.MouseButton.Button = MouseButton.Left;
+                click.MouseButton.Clicks = 1;
+                click.MouseButton.X = ev.MouseMotion.X;
+                click.MouseButton.Y = ev.MouseMotion.Y;
+                Ui.HandleEvent(in click);
+            }
         }
     }
 

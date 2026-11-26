@@ -7,6 +7,8 @@ public static class Fonts
 {
     private static readonly Dictionary<ushort, Font> Entries = new();
     private static readonly List<Font> Removed = new();
+    private static readonly Dictionary<(ushort, bool, bool), (ushort Id, ulong Base)> Synthesized = new();
+    private static ushort _nextSynthesizedId = 63;
 
     public const ushort DefaultFontId = 0;
 
@@ -71,6 +73,28 @@ public static class Fonts
         Release(font);
     }
 
+    // Bold and italic faces drawn from a regular one, given the top font ids so they stay clear of the ones apps pick.
+    internal static ushort Styled(ushort fontId, bool bold, bool italic)
+    {
+        if (!bold && !italic)
+        {
+            return fontId;
+        }
+
+        var baseFont = Entries.TryGetValue(fontId, out var registered) ? registered : Font.GetDefault();
+        var key = (fontId, bold, italic);
+        if (Synthesized.TryGetValue(key, out var entry) && entry.Base == (ulong)baseFont)
+        {
+            return entry.Id;
+        }
+
+        var id = entry.Id != 0 ? entry.Id : _nextSynthesizedId--;
+        var font = Font.CreateSynthetic(baseFont, new FontSynthesisDesc { Bold = bold ? 0.035f : 0, Slant = italic ? 0.2f : 0 });
+        Register(id, font);
+        Synthesized[key] = (id, baseFont);
+        return id;
+    }
+
     private static Font RegisterLoaded(Font font, ushort fontId, string source)
     {
         if ((ulong)font == 0)
@@ -114,5 +138,7 @@ public static class Fonts
 
         ReleaseRemoved();
         Entries.Clear();
+        Synthesized.Clear();
+        _nextSynthesizedId = 63;
     }
 }

@@ -157,6 +157,7 @@ public static partial class Ui
         _frameFocusedWidget = null;
         _ui.Dispose();
         _ui = null;
+        Images.Shutdown();
         FontAwesome.Shutdown();
         Fonts.Shutdown();
     }
@@ -186,6 +187,7 @@ public static partial class Ui
     public static void Update(float deltaTime)
     {
         var ui = Native;
+        Images.Upload();
         ui.BeginFrame(deltaTime);
         Fonts.ReleaseRemoved();
         DeltaTime = deltaTime;
