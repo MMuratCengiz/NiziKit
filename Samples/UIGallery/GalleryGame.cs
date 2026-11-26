@@ -4,8 +4,16 @@ using Semaphore = DenOfIz.Semaphore;
 
 namespace UIGallery;
 
-internal sealed class GalleryGame() : Game(new GameDesc { Title = "NiziKit UI Gallery", Width = 1360, Height = 900 })
+internal sealed class GalleryGame() : Game(new GameDesc
 {
+    Title = "NiziKit UI Gallery",
+    Width = 1360,
+    Height = 900,
+    RenderMode = OnDemand ? RenderMode.OnDemand : RenderMode.Continuous
+})
+{
+    private static readonly bool OnDemand = Environment.GetEnvironmentVariable("UIGALLERY_ONDEMAND") == "1";
+
     private readonly bool _renderToTexture = Environment.GetEnvironmentVariable("UIGALLERY_TEXTURE") == "1";
     private readonly bool _printStats = Environment.GetEnvironmentVariable("UIGALLERY_STATS") == "1";
     private readonly int _script = int.TryParse(Environment.GetEnvironmentVariable("UIGALLERY_SCRIPT"), out var script) ? script : 0;
@@ -50,6 +58,10 @@ internal sealed class GalleryGame() : Game(new GameDesc { Title = "NiziKit UI Ga
         var (_, visualizerReady) = _visualizer.Render(dt);
 
         Ui.Update(dt);
+        if (OnDemand && (_gallery.VisualizerShown || (_script != 0 && _frameCount <= Math.Max(8, _scriptClickFrame + 2))))
+        {
+            RequestFrame();
+        }
 
         if (_renderToTexture)
         {

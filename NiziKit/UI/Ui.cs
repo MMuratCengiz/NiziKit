@@ -110,6 +110,27 @@ public static partial class Ui
 
     public static bool WantsTextInput => _textInputActive;
 
+    internal static bool IsAnimating => _ui is { IsAnimating: true };
+
+    internal static float NextTimer
+    {
+        get
+        {
+            var next = _focusedWidget is TextInput { IsFocused: true, ReadOnly: false } input ? input.Editor.NextBlink : float.PositiveInfinity;
+            if (_tooltipTarget != 0 && _tooltipTime < TooltipDelay)
+            {
+                next = MathF.Min(next, TooltipDelay - _tooltipTime);
+            }
+
+            foreach (var notification in Notifications)
+            {
+                next = MathF.Min(next, NotificationLifetime - notification.Age);
+            }
+
+            return next;
+        }
+    }
+
     internal static uint Focus
     {
         get => _ui?.Focus ?? 0;
@@ -256,6 +277,20 @@ public static partial class Ui
     public static (Texture Texture, Semaphore Semaphore) RenderToTexture(ReadOnlySpan<Semaphore> waitSemaphores = default)
     {
         return Native.RenderToTexture((uint)GraphicsContext.FrameIndex, waitSemaphores);
+    }
+
+    internal static void AddIdleTime(float seconds)
+    {
+        Time += seconds;
+        if (_tooltipTarget != 0)
+        {
+            _tooltipTime += seconds;
+        }
+
+        foreach (var notification in Notifications)
+        {
+            notification.Age += seconds;
+        }
     }
 
     public static void Notify(string text, Color color = default)

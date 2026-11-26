@@ -4,7 +4,26 @@ namespace UIGallery;
 
 internal sealed partial class Gallery
 {
+    private readonly List<Image> _visualizerImages = new();
     private int _roundedSelection = 3;
+
+    public bool VisualizerShown
+    {
+        get
+        {
+            var viewport = Ui.ViewportSize;
+            foreach (var image in _visualizerImages)
+            {
+                var bounds = image.Bounds;
+                if (image.IsShown && bounds.Right > 0 && bounds.Bottom > 0 && bounds.X < viewport.X && bounds.Y < viewport.Y)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
 
     private Widget MediaPage()
     {
@@ -76,7 +95,9 @@ internal sealed partial class Gallery
 
     private Column FitColumn(string caption, UIImageFit fit)
     {
-        return Captioned(caption, new Image { Source = Bind(_visualizer), Fit = fit, Height = 150, Background = Color.Hex(0x05070CFF), Radius = 8 });
+        var image = new Image { Source = Bind(_visualizer), Fit = fit, Height = 150, Background = Color.Hex(0x05070CFF), Radius = 8 };
+        _visualizerImages.Add(image);
+        return Captioned(caption, image);
     }
 
     private static Column Captioned(string caption, Widget content, bool fill)

@@ -14,13 +14,13 @@
     <!-- dotnet build -p:DenOfIzSource=Local builds against the DenOfIz checkout at $(DenOfIzRoot) -->
     <PropertyGroup>
         <DenOfIzSource Condition="'$(DenOfIzSource)' == ''">NuGet</DenOfIzSource>
-        <DenOfIzGraphicsVersion Condition="'$(DenOfIzGraphicsVersion)' == ''">1.2.0</DenOfIzGraphicsVersion>
+        <DenOfIzGraphicsVersion Condition="'$(DenOfIzGraphicsVersion)' == ''">1.2.4</DenOfIzGraphicsVersion>
         <DenOfIzRoot Condition="'$(DenOfIzRoot)' == ''">$(MSBuildThisFileDirectory)../../DenOfIz</DenOfIzRoot>
         <DenOfIzLocalBuildDir Condition="'$(DenOfIzLocalBuildDir)' == ''">$(DenOfIzRoot)/build/DenOfIz/Install_OSX</DenOfIzLocalBuildDir>
     </PropertyGroup>
 
     <ItemGroup Condition="'$(DenOfIzSource)' == 'NuGet'">
-        <PackageReference Include="DenOfIzGraphics" Version="1.2.4" />
+        <PackageReference Include="DenOfIzGraphics" Version="$(DenOfIzGraphicsVersion)" />
     </ItemGroup>
 
     <ItemGroup Condition="'$(DenOfIzSource)' == 'Local'">

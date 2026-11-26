@@ -12,8 +12,12 @@ namespace NiziKit.Application;
 
 public class Game : IDisposable
 {
+    private const float ResumeDeltaTime = 1f / 60;
+    private const float AcquireRetrySeconds = 1f / 60;
+
     private static Game? _instance;
     private static bool _engineInitialized;
+    private static int _frameRequested;
 
     public static Game Instance => _instance ?? throw new InvalidOperationException("Game not initialized");
 
@@ -21,6 +25,9 @@ public class Game : IDisposable
     private readonly Time _time;
     private readonly GraphicsContext _graphics;
     private readonly GpuBinding _gpuBinding;
+    private readonly RenderMode _renderMode;
+    private bool _settle = true;
+    private bool _retryAcquire;
     private bool _disposed;
 
     public AppWindow Window { get; }
@@ -59,6 +66,7 @@ public class Game : IDisposable
         InitializeEngine();
 
         desc ??= new GameDesc();
+        _renderMode = desc.RenderMode;
         _fixedTimestep = new FixedTimestep(desc.FixedUpdateRate);
 
         var windowFlags = new WindowFlags
@@ -72,7 +80,7 @@ public class Game : IDisposable
 
         _time = new Time();
         InputSystem = new InputSystem();
-        _graphics = new GraphicsContext(Window.NativeWindow, desc.Graphics);
+        _graphics = new GraphicsContext(desc.Graphics, Window.NativeWindow, _renderMode == RenderMode.OnDemand ? PresentMode.Fifo : PresentMode.Immediate);
         GraphicsContext.ResizeCompleted += OnResize;
         _gpuBinding = new GpuBinding();
 
@@ -119,9 +127,19 @@ public class Game : IDisposable
         IsRunning = true;
         Time.Start();
 
-        while (IsRunning)
+        if (_renderMode == RenderMode.OnDemand)
         {
-            RunFrame();
+            while (IsRunning)
+            {
+                RunOnDemandFrame();
+            }
+        }
+        else
+        {
+            while (IsRunning)
+            {
+                RunFrame();
+            }
         }
 
         GraphicsContext.WaitIdle();
@@ -131,6 +149,14 @@ public class Game : IDisposable
     public void Quit()
     {
         IsRunning = false;
+    }
+
+    public static void RequestFrame()
+    {
+        if (_instance is { _renderMode: RenderMode.OnDemand } && Interlocked.Exchange(ref _frameRequested, 1) == 0)
+        {
+            InputSystem.Wake();
+        }
     }
 
     public void Dispose()
@@ -217,6 +243,95 @@ public class Game : IDisposable
         if (canRender)
         {
             Render(Time.DeltaTime);
+        }
+    }
+
+    private void RunOnDemandFrame()
+    {
+        var wait = Window.IsMinimized || (!_settle && Volatile.Read(ref _frameRequested) == 0 && !Ui.IsAnimating && !UiDebug.HasPending);
+        _settle = false;
+        if (wait || _retryAcquire)
+        {
+            WaitForEvent(wait ? float.PositiveInfinity : AcquireRetrySeconds);
+        }
+
+        Time.Tick();
+        if (wait)
+        {
+            Ui.AddIdleTime(Time.ClampDeltaTime(ResumeDeltaTime));
+            _fixedTimestep.Reset();
+        }
+
+        while (IsRunning && InputSystem.PollEvent(out var ev))
+        {
+            DispatchEvent(ref ev);
+        }
+
+        if (!IsRunning)
+        {
+            return;
+        }
+
+        Window.Refresh();
+
+        if (StopOnDeviceLost() || Window.IsMinimized)
+        {
+            return;
+        }
+
+        var fixedSteps = _fixedTimestep.Accumulate(Time.UnscaledDeltaTime);
+        for (var i = 0; i < fixedSteps; i++)
+        {
+            FixedUpdate((float)_fixedTimestep.FixedDeltaTime);
+        }
+
+        var canRender = GraphicsContext.AcquireFrame();
+        if (StopOnDeviceLost())
+        {
+            return;
+        }
+
+        Interlocked.Exchange(ref _frameRequested, 0);
+        Update(Time.DeltaTime);
+        if (canRender)
+        {
+            Render(Time.DeltaTime);
+        }
+
+        _settle |= !canRender;
+        _retryAcquire = !canRender;
+    }
+
+    private void WaitForEvent(float maxSeconds)
+    {
+        var timeout = Window.IsMinimized ? float.PositiveInfinity : MathF.Min(Ui.NextTimer, maxSeconds);
+        var received = float.IsPositiveInfinity(timeout)
+            ? InputSystem.WaitEvent(out var ev)
+            : InputSystem.WaitEventTimeout(out ev, (int)Math.Ceiling(Math.Min(timeout * 1000.0, int.MaxValue)));
+        if (received)
+        {
+            DispatchEvent(ref ev);
+        }
+    }
+
+    private void DispatchEvent(ref Event ev)
+    {
+        _settle = true;
+        switch (ev.Type)
+        {
+            case EventType.Wake:
+                return;
+            case EventType.Quit:
+                IsRunning = false;
+                return;
+            case EventType.WindowEvent:
+                Window.HandleWindowEvent(ev.Window.Event);
+                break;
+        }
+
+        if (!Ui.HandleEvent(in ev))
+        {
+            OnEvent(ref ev);
         }
     }
 

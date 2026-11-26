@@ -25,6 +25,8 @@ public static partial class UiDebug
 
     public static bool IsAnimating => Ui.IsInitialized && (Ui.Native.IsAnimating || Images.Loading || Pending.Count > 0);
 
+    internal static bool HasPending => Pending.Count > 0;
+
     public static IDisposable Headless(float width = 1280, float height = 800, float displayScale = 1)
     {
         if (Ui.IsInitialized)

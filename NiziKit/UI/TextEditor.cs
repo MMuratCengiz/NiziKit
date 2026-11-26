@@ -53,6 +53,15 @@ internal sealed class TextEditor
 
     public bool CaretVisible => (Ui.Time - _touched) % BlinkPeriod < BlinkPeriod * 0.5f;
 
+    public float NextBlink
+    {
+        get
+        {
+            var phase = (Ui.Time - _touched) % BlinkPeriod;
+            return (phase < BlinkPeriod * 0.5f ? BlinkPeriod * 0.5f : BlinkPeriod) - phase;
+        }
+    }
+
     public bool SetText(ReadOnlySpan<char> text)
     {
         var previous = _length;

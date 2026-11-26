@@ -68,6 +68,8 @@ public sealed class Time
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static void Tick() => Instance._Tick();
 
+    internal static float ClampDeltaTime(float maxDeltaTime) => Instance._ClampDeltaTime(maxDeltaTime);
+
     public Time()
     {
         _instance = this;
@@ -93,5 +95,20 @@ public sealed class Time
         _deltaTime = _unscaledDeltaTime * _timeScale;
         _totalTime += _deltaTime;
         _frameCount++;
+    }
+
+    private float _ClampDeltaTime(float maxDeltaTime)
+    {
+        var excess = _unscaledDeltaTime - maxDeltaTime;
+        if (excess <= 0)
+        {
+            return 0;
+        }
+
+        _totalTime -= _deltaTime;
+        _unscaledDeltaTime = maxDeltaTime;
+        _deltaTime = maxDeltaTime * _timeScale;
+        _totalTime += _deltaTime;
+        return excess;
     }
 }

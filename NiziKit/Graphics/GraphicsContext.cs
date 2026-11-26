@@ -70,7 +70,7 @@ public sealed class GraphicsContext : IDisposable
     {
     }
 
-    private GraphicsContext(GraphicsDesc desc, Window? window)
+    internal GraphicsContext(GraphicsDesc desc, Window? window, PresentMode defaultPresentMode = PresentMode.Immediate)
     {
         _numFrames = desc.NumFrames;
         _backBufferFormat = desc.BackBufferFormat;
@@ -93,7 +93,7 @@ public sealed class GraphicsContext : IDisposable
         {
             _swapChain = _logicalDevice.CreateSwapChain(new SwapChainDesc
             {
-                PresentMode = desc.PresentMode,
+                PresentMode = desc.PresentMode ?? defaultPresentMode,
                 BackBufferFormat = desc.BackBufferFormat,
                 DepthBufferFormat = Format.Undefined,
                 CommandQueue = _graphicsQueue,

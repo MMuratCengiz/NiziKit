@@ -7,7 +7,7 @@ public sealed class GraphicsDesc
     public uint NumFrames { get; set; } = 3;
     public Format BackBufferFormat { get; set; } = Format.B8G8R8A8Unorm;
     public Format DepthBufferFormat { get; set; } = Format.D32Float;
-    public PresentMode PresentMode { get; set; } = PresentMode.Immediate;
+    public PresentMode? PresentMode { get; set; }
 
     public APIPreference ApiPreference { get; set; } = new()
     {

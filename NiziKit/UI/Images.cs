@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using DenOfIz;
 using Microsoft.Extensions.Logging;
+using NiziKit.Application;
 using NiziKit.Core;
 using NiziKit.Graphics;
 
@@ -45,16 +46,19 @@ internal static class Images
             if (data == null)
             {
                 entry.Failed = true;
-                return;
             }
-
-            Decoded.Enqueue((entry, data));
+            else
+            {
+                Decoded.Enqueue((entry, data));
+            }
         }
         catch (Exception e)
         {
             Log.Get("NiziKit.UI").LogWarning("Image {Source} could not be loaded: {Message}", Shorten(source), e.Message);
             entry.Failed = true;
         }
+
+        Game.RequestFrame();
     }
 
     private static async Task<byte[]> Read(string source)

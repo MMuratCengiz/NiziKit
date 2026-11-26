@@ -12,5 +12,6 @@ public sealed class GameDesc
     public bool Borderless { get; init; } = false;
     public bool Fullscreen { get; init; } = false;
     public double FixedUpdateRate { get; init; } = 60.0;
+    public RenderMode RenderMode { get; init; } = RenderMode.Continuous;
     public GraphicsDesc Graphics { get; init; } = new();
 }
