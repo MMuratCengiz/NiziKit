@@ -33,6 +33,8 @@ public sealed class Theme
     public ushort FontId { get; set; }
     public float FontSize { get; set; } = 14;
     public float SmallFontSize { get; set; } = 12;
+    public float CaptionFontSize { get; set; } = 10;
+    public float HeadingFontSize { get; set; } = 20;
     public float TitleFontSize { get; set; } = 18;
     public float CornerRadius { get; set; } = 6;
     public float TransitionDuration { get; set; } = 0.12f;

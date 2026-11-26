@@ -1,5 +1,3 @@
-using NiziKit.UI.Widgets;
-
 namespace UIGallery;
 
 internal sealed partial class Gallery
@@ -10,149 +8,155 @@ internal sealed partial class Gallery
         ("SPACE_BETWEEN", UIJustify.SpaceBetween), ("SPACE_AROUND", UIJustify.SpaceAround), ("SPACE_EVENLY", UIJustify.SpaceEvenly)
     ];
 
-    private static readonly string[] Tags = ["flexbox", "yoga", "wrap", "gap", "line gap", "immediate", "retained", "points", "percent", "auto margin", "absolute", "display none", "contents", "dividers"];
+    private static readonly string[] Tags = ["flexbox", "yoga", "wrap", "gap", "line gap", "retained", "bindings", "points", "percent", "spacer", "float", "visible", "dividers"];
 
-    private readonly uint _growId = Ui.Id("Gallery.Grow");
-    private readonly uint _hiddenListId = Ui.Id("Gallery.HiddenList");
     private bool _expanded;
     private bool _listHidden;
 
     private Widget LayoutPage()
     {
-        var hide = new Switch("Hide the list (Display NONE keeps its scroll offset)");
-        hide.Changed += s => _listHidden = s.On;
         return Page(
-            new Card("Justify", "Distribution of three fixed boxes along a row.") { new Immediate(DrawJustify) },
-            new Card("Wrap and gaps", "Wrap WRAP with Gap between items and LineGap between lines.") { new Immediate(DrawWrap) },
-            new Card("Auto margins, absolute and equal columns", "Margin left AUTO pushes to the end, ABSOLUTE insets place a badge, three Fill columns share the row.")
+            Card("Justify", "Distribution of three fixed boxes along a row.", 0,
+                new Column
+                {
+                    Gap = 8,
+                    Children =
+                    [
+                        .. Justifies.Select(j => new Row
+                        {
+                            Gap = 12,
+                            Children =
+                            [
+                                new Label(j.Name, TextStyle.Small) { Width = 120 },
+                                new Row
+                                {
+                                    Flex = 1,
+                                    Justify = j.Justify,
+                                    Padding = 6,
+                                    Background = Color.SurfaceAlt,
+                                    Radius = 6,
+                                    Children = [Swatch(), Swatch(), Swatch()]
+                                }
+                            ]
+                        })
+                    ]
+                }),
+            Card("Wrap and gaps", "Wrap with Gap between items and LineGap between lines.", 0,
+                new Row
+                {
+                    Wrap = true,
+                    Gap = 8,
+                    LineGap = 8,
+                    Children =
+                    [
+                        .. Tags.Select(tag => new Row
+                        {
+                            Padding = (10, 5),
+                            Background = Color.AccentSoft,
+                            Radius = 12,
+                            Children = [new Label(tag, TextStyle.Sized(13, Color.Accent))]
+                        })
+                    ]
+                }),
+            Card("Spacers, floating badges and equal columns", "A Spacer pushes to the end, Float places a badge over its parent, three Flex columns share the row. Shrink the window: the toolbar text ellipsizes instead of overflowing.", 0,
+                new Row
+                {
+                    Gap = 8,
+                    Padding = 10,
+                    Background = Color.SurfaceAlt,
+                    Radius = 8,
+                    Children =
+                    [
+                        new Icon(FontAwesome.Bars),
+                        new Label("Toolbar"),
+                        new Spacer(),
+                        new Label("pushed right by a Spacer", TextStyle.Small),
+                        new Icon(FontAwesome.Gear)
+                    ]
+                },
+                new Row
+                {
+                    Gap = 16,
+                    Children = [.. Enumerable.Range(0, 3).Select(EqualColumn)]
+                }),
+            Card("Visibility and dividers", "Dividers between children; a hidden list is not built, and its scroll offset comes back when it is shown; clicking the box animates its size.", 0,
+                new Switch("Hide the list") { On = Bind(() => _listHidden, hidden => _listHidden = hidden) },
+                new Row
+                {
+                    Gap = 16,
+                    Align = UIAlign.Start,
+                    Children =
+                    [
+                        new ScrollView
+                        {
+                            Width = 220,
+                            Height = 150,
+                            Visible = Bind(() => !_listHidden),
+                            Dividers = Color.Border,
+                            Background = Color.SurfaceAlt,
+                            Radius = 8,
+                            Children = [.. Enumerable.Range(0, 20).Select(i => new Row { Padding = (12, 8), Children = [new Label($"Divided row {i + 1}", TextStyle.Sized(13))] })]
+                        },
+                        GrowBox()
+                    ]
+                }));
+    }
+
+    private static Widget Swatch()
+    {
+        return new Row { Width = 48, Height = 24, Background = Color.Accent, Radius = 4 };
+    }
+
+    private static Widget EqualColumn(int i)
+    {
+        var column = new Column
+        {
+            Flex = 1,
+            Height = 90,
+            Padding = 12,
+            Background = Color.SurfaceAlt,
+            Radius = 8,
+            Children = [new Label($"Column {i + 1}"), new Label("Flex = 1", TextStyle.Small)]
+        };
+        if (i == 1)
+        {
+            column.Children.Add(new Row
             {
-                new Immediate(DrawMargins)
-            },
-            new Card("Display and dividers", "Dividers between in-flow children; a list hidden with Display NONE keeps its state; clicking the box animates its size.")
-            {
-                hide,
-                new Immediate(DrawDisplay)
+                Float = UIAnchor.TopRight,
+                Offset = new(6, -6),
+                Padding = (7, 2),
+                Background = Color.Danger,
+                Radius = 9,
+                Children = [new Label("3", TextStyle.Sized(11, Color.OnAccent))]
             });
-    }
-
-    private static void DrawJustify()
-    {
-        var theme = Ui.Theme;
-        using (Ui.Column().Gap(8).Open())
-        {
-            foreach (var (name, justify) in Justifies)
-            {
-                using (Ui.Row().AlignItems(UIAlign.Center).Gap(12).Open())
-                {
-                    using (Ui.Row().Width(120).Shrink(0).Open())
-                    {
-                        Ui.Text(name, 12, theme.TextMuted);
-                    }
-
-                    using (Ui.Row().Fill().Justify(justify).Padding(6).Background(theme.SurfaceAlt).CornerRadius(6).Open())
-                    {
-                        for (var i = 0; i < 3; i++)
-                        {
-                            Ui.Element().Size(48, 24).Background(theme.Accent).CornerRadius(4).Leaf();
-                        }
-                    }
-                }
-            }
         }
+
+        return column;
     }
 
-    private static void DrawWrap()
+    private Widget GrowBox()
     {
-        var theme = Ui.Theme;
-        using (Ui.Row().Wrap().Gap(8).LineGap(8).Open())
+        var box = new Column
         {
-            foreach (var tag in Tags)
-            {
-                using (Ui.Row().Padding(10, 5).Background(theme.AccentSoft).CornerRadius(12).Open())
-                {
-                    Ui.Text(tag, 13, theme.Accent);
-                }
-            }
-        }
-    }
-
-    private static void DrawMargins()
-    {
-        var theme = Ui.Theme;
-        using (Ui.Column().Gap(16).Open())
-        {
-            using (Ui.Row().AlignItems(UIAlign.Center).Gap(8).Padding(10).Background(theme.SurfaceAlt).CornerRadius(8).Open())
-            {
-                Ui.Text(FontAwesome.Bars, 14, theme.Text, FontAwesome.FontId);
-                Ui.Text("Toolbar", 14, theme.Text);
-                using (Ui.Row().Margin(left: UILength.Auto).Gap(8).Open())
-                {
-                    Ui.Text("pushed right by Margin.Left = Auto", 12, theme.TextMuted);
-                    Ui.Text(FontAwesome.Gear, 14, theme.Text, FontAwesome.FontId);
-                }
-            }
-
-            using (Ui.Row().Gap(16).Open())
-            {
-                for (var i = 0; i < 3; i++)
-                {
-                    using (Ui.Column().Fill().Height(90).Padding(12).Background(theme.SurfaceAlt).CornerRadius(8).Open())
-                    {
-                        Ui.Text($"Column {i + 1}", 14, theme.Text);
-                        Ui.Text("Grow 1, Shrink 1, Basis 0", 12, theme.TextMuted);
-                        if (i == 1)
-                        {
-                            using (Ui.Row().Absolute(right: -6, top: -6).Padding(7, 2).Background(theme.Danger).CornerRadius(9).Open())
-                            {
-                                Ui.Text("3", 11, theme.OnAccent);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private void DrawDisplay()
-    {
-        var theme = Ui.Theme;
-        if (Ui.Interaction(_growId).Clicked)
+            Width = 140,
+            Height = 80,
+            Justify = UIJustify.Center,
+            Align = UIAlign.Center,
+            Background = Color.AccentSoft,
+            Radius = 8,
+            Animate = UITransitionPropertyFlagBits.All,
+            AnimateDuration = 0.35f,
+            Easing = UIEasing.EaseOutBack,
+            Children = [new Label(() => _expanded ? "Click to shrink" : "Click to grow", TextStyle.Sized(13)) { Color = Bind(() => _expanded ? Color.OnAccent : Color.Accent) }]
+        };
+        box.OnClick = () =>
         {
             _expanded = !_expanded;
-        }
-
-        using (Ui.Row().Gap(16).AlignItems(UIAlign.Start).Open())
-        {
-            using (Ui.Column(_hiddenListId)
-                       .Width(220)
-                       .Height(150)
-                       .ScrollY()
-                       .Hidden(_listHidden)
-                       .Dividers(theme.Border)
-                       .Background(theme.SurfaceAlt)
-                       .CornerRadius(8)
-                       .Open())
-            {
-                for (var i = 0; i < 20; i++)
-                {
-                    using (Ui.Row().Padding(12, 8).Shrink(0).Open())
-                    {
-                        Ui.Text($"Divided row {i + 1}", 13, theme.Text);
-                    }
-                }
-            }
-
-            using (Ui.Column(_growId)
-                       .Size(_expanded ? 260 : 140, _expanded ? 150 : 80)
-                       .Center()
-                       .Background(_expanded ? theme.Accent : theme.AccentSoft)
-                       .CornerRadius(_expanded ? 24 : 8)
-                       .Cursor(SystemCursor.Pointer)
-                       .Animate(UITransitionPropertyFlagBits.All, 0.35f, UIEasing.EaseOutBack)
-                       .Open())
-            {
-                Ui.Text(_expanded ? "Click to shrink" : "Click to grow", 13, _expanded ? theme.OnAccent : theme.Accent);
-            }
-        }
+            box.Width = _expanded ? 260 : 140;
+            box.Height = _expanded ? 150 : 80;
+            box.Radius = _expanded ? 24 : 8;
+            box.Background = _expanded ? Color.Accent : Color.AccentSoft;
+        };
+        return box;
     }
 }

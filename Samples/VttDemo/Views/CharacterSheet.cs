@@ -1,86 +1,52 @@
-using System.Numerics;
-using DenOfIz;
-using NiziKit.UI;
-using NiziKit.UI.Widgets;
 using VttDemo.Model;
 using VttDemo.UiKit;
 
 namespace VttDemo.Views;
 
-/// <summary>
-/// A character sheet window: a TabView whose pages mix immediate-mode drawing (stat tiles, spell cards, the inventory
-/// table) with retained widgets (a filtered skill ListView, condition checkboxes, a notes TextArea).
-/// </summary>
 public sealed class CharacterSheet
 {
+    private enum SheetTab
+    {
+        Overview,
+        Skills,
+        Combat,
+        Spells,
+        Gear,
+        Notes
+    }
+
+    private static readonly TextStyle ColumnHeader = TextStyle.Sized(10, Color.TextMuted);
+
     private readonly Campaign _campaign;
-    private readonly uint _baseId;
-    private readonly TabView _tabs;
-
-    private readonly Button[] _hpButtons;
-    private readonly Dictionary<string, Checkbox> _conditions = new();
-
-    private readonly TextBox _skillFilter;
-    private readonly ListView _skillList;
-    private readonly List<SkillDef> _visibleSkills = new();
-    private string? _appliedFilter;
-
-    private readonly HashSet<Spell> _expanded = new();
-    private readonly string[] _attackLabels;
-
-    private readonly TextBox _newItem;
-    private readonly Button _addItem;
-    private readonly TextArea _notes;
+    private readonly Tabs<SheetTab> _tabs;
+    private SheetTab _tab;
+    private string _skillFilter = "";
+    private SkillDef? _selectedSkill;
 
     public CharacterSheet(Campaign campaign, Character character)
     {
         _campaign = campaign;
         Character = character;
-        _baseId = Ui.Id("Sheet", character.Id);
-
-        _hpButtons =
-        [
-            HpButton("-5", "Take 5 damage", () => campaign.Damage(character, 5)),
-            HpButton("-1", "Take 1 damage", () => campaign.Damage(character, 1)),
-            HpButton("+1", "Heal 1", () => campaign.Heal(character, 1)),
-            HpButton("+5", "Heal 5", () => campaign.Heal(character, 5))
-        ];
-
-        foreach (var condition in Character.AllConditions)
+        _tabs = new Tabs<SheetTab>
         {
-            var checkbox = new Checkbox(condition) { BoxSize = 15 };
-            checkbox.Changed += c => campaign.SetCondition(character, condition, c.Checked);
-            _conditions[condition] = checkbox;
-        }
-
-        _skillFilter = new TextBox { Placeholder = "Filter skills…", Width = UIValue.Auto };
-        _skillList = new ListView { Fill = true, Height = UIValue.Auto, RowPadding = UILengthEdges.Symmetric(10, 6), ItemTemplate = DrawSkillRow };
-        _skillList.ItemActivated += (_, index) => RollSkill(_visibleSkills[index]);
-
-        _attackLabels = character.Attacks.Select(a => $"Attack {Fmt.Sign(a.Bonus)}").ToArray();
-
-        _newItem = new TextBox { Placeholder = "Add an item and press Enter", Fill = true };
-        _newItem.Submitted += _ => AddItem();
-        _addItem = new Button("Add") { Icon = FontAwesome.Plus };
-        _addItem.Clicked += _ => AddItem();
-
-        _notes = new TextArea(character.Notes) { Fill = true, Height = UIValue.Auto, Placeholder = "Backstory, session notes, grudges…" };
-        _notes.TextChanged += t => character.Notes = t.Text;
-
-        _tabs = new TabView { Fill = true };
-        _tabs.Add("Overview", Im.View(DrawOverview, scroll: true, padding: 14, gap: 10), FontAwesome.User);
-        _tabs.Add("Skills", Im.View(DrawSkills, padding: 12, gap: 8), FontAwesome.ListCheck);
-        _tabs.Add("Combat", Im.View(DrawCombat, scroll: true, padding: 14, gap: 10), FontAwesome.Crosshairs);
-        _tabs.Add("Spells", Im.View(DrawSpells, scroll: true, padding: 14, gap: 8), FontAwesome.Lightbulb);
-        _tabs.Add("Gear", Im.View(DrawInventory, padding: 12, gap: 8), FontAwesome.Cube);
-        _tabs.Add("Notes", Im.View(DrawNotes, padding: 12, gap: 8), FontAwesome.Edit);
+            Selected = Bind(() => _tab, tab => _tab = tab),
+            Pages =
+            [
+                new(SheetTab.Overview, "Overview", FontAwesome.User, OverviewPage()),
+                new(SheetTab.Skills, "Skills", FontAwesome.ListCheck, SkillsPage()),
+                new(SheetTab.Combat, "Combat", FontAwesome.Crosshairs, CombatPage()),
+                new(SheetTab.Spells, "Spells", FontAwesome.Lightbulb, SpellsPage()),
+                new(SheetTab.Gear, "Gear", FontAwesome.Cube, GearPage()),
+                new(SheetTab.Notes, "Notes", FontAwesome.Edit, NotesPage())
+            ]
+        };
 
         Window = new FloatingWindow(character.Name, _tabs)
         {
             Icon = character.Faction == Faction.Party ? FontAwesome.User : FontAwesome.Bug,
             Accent = character.Color,
-            Size = new Vector2(580, 660),
-            MinSize = new Vector2(380, 300)
+            Rect = new(316, 52, 620, 660),
+            MinSize = new(380, 300)
         };
     }
 
@@ -89,16 +55,11 @@ public sealed class CharacterSheet
 
     public int SelectedTab
     {
-        get => _tabs.SelectedIndex;
-        set => _tabs.SelectedIndex = value;
+        get => (int)_tab;
+        set => _tab = (SheetTab)value;
     }
 
-    public int TabCount => _tabs.Tabs.Count;
-
-    private uint Id(uint n)
-    {
-        return Ui.Id(_baseId, n);
-    }
+    public int TabCount => _tabs.Pages.Count;
 
     private void Roll(string formula, string label)
     {
@@ -110,308 +71,324 @@ public sealed class CharacterSheet
         Roll(Dice.WithModifier("1d20", Character.SkillTotal(skill)), skill.Name);
     }
 
-    private Button HpButton(string text, string tooltip, Action action)
+    private static Row Tiles(params Widget[] tiles)
     {
-        var button = new Button(text) { Tooltip = tooltip, FontSize = 12, Padding = UILengthEdges.Symmetric(10, 4) };
-        button.Clicked += _ => action();
-        return button;
+        return new Row { Gap = 8, Wrap = true, LineGap = 8, Children = [.. tiles] };
     }
 
-    private void DrawOverview()
+    private Widget OverviewPage()
     {
-        var theme = Ui.Theme;
         var c = Character;
-
-        using (Ui.Row().Gap(14).AlignItems(UIAlign.Center).Shrink(0).Open())
+        var down = Kit.Badge("DOWN", Palette.Bad.WithAlpha(50), Palette.Bad);
+        down.Visible = Bind(() => c.IsDown);
+        return new ScrollView
         {
-            Im.Portrait(c, 64);
-            using (Ui.Column().Fill().Gap(3).Open())
-            {
-                Im.Line(c.Name, 21, theme.Text);
-                Im.Line(c.Subtitle, 13, theme.TextMuted);
-                using (Ui.Row().Gap(6).Wrap().LineGap(4).Margin(0, 4, 0, 0).Open())
+            Padding = 14,
+            Gap = 10,
+            Children =
+            [
+                new Row
                 {
-                    Im.Badge($"Speed {c.Speed} ft.", theme.SurfaceAlt, theme.TextMuted);
-                    Im.Badge($"Init {Fmt.Sign(c.InitBonus)}", theme.SurfaceAlt, theme.TextMuted);
-                    Im.Badge($"BAB {Fmt.Sign(c.Bab)}", theme.SurfaceAlt, theme.TextMuted);
-                    if (c.IsDown)
-                    {
-                        Im.Badge("DOWN", Im.Alpha(Im.Bad, 50), Im.Bad);
-                    }
-                }
-            }
-        }
-
-        using (Ui.Column().Gap(8).Padding(12).Shrink(0).Background(theme.SurfaceAlt).Border(theme.Border, 1).CornerRadius(8).Open())
-        {
-            using (Ui.Row().Gap(8).AlignItems(UIAlign.Center).Open())
-            {
-                Im.Icon(FontAwesome.Heart, 13, Im.Bad);
-                Im.Line("Hit Points", 13, theme.Text);
-                Im.Spacer();
-                Ui.Text($"{c.Hp} / {c.MaxHp}", 16, theme.Text);
-                if (c.TempHp > 0)
+                    Gap = 14,
+                    Children =
+                    [
+                        Kit.Portrait(c, 64),
+                        new Column
+                        {
+                            Flex = 1,
+                            Gap = 3,
+                            Children =
+                            [
+                                new Label(c.Name, TextStyle.Sized(21)),
+                                new Label(c.Subtitle, TextStyle.Sized(13, Color.TextMuted)),
+                                new Row
+                                {
+                                    Gap = 6,
+                                    Wrap = true,
+                                    LineGap = 4,
+                                    Margin = (0, 4, 0, 0),
+                                    Children =
+                                    [
+                                        Kit.Badge($"Speed {c.Speed} ft.", Color.SurfaceAlt, Color.TextMuted),
+                                        Kit.Badge($"Init {Fmt.Sign(c.InitBonus)}", Color.SurfaceAlt, Color.TextMuted),
+                                        Kit.Badge($"BAB {Fmt.Sign(c.Bab)}", Color.SurfaceAlt, Color.TextMuted),
+                                        down
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                },
+                HitPoints(),
+                Kit.SectionHeader("DEFENSE"),
+                Tiles(
+                    Kit.StatTile("AC", () => Fmt.Int(c.Ac), "armor class", 92),
+                    Kit.StatTile("TOUCH", () => Fmt.Int(c.Touch), "", 76),
+                    Kit.StatTile("FLAT", () => Fmt.Int(c.FlatFooted), "", 76),
+                    Kit.StatTile("CMB", () => Fmt.Sign(c.Cmb), "roll", 76, () => Roll(Dice.WithModifier("1d20", c.Cmb), "Combat maneuver"), "Combat maneuver bonus"),
+                    Kit.StatTile("CMD", () => Fmt.Int(c.Cmd), "", 76, null, "Combat maneuver defense")),
+                Kit.SectionHeader("SAVING THROWS"),
+                Tiles(
+                    Kit.StatTile("FORTITUDE", () => Fmt.Sign(c.Fort), "roll", 110, () => Roll(Dice.WithModifier("1d20", c.Fort), "Fortitude save")),
+                    Kit.StatTile("REFLEX", () => Fmt.Sign(c.Ref), "roll", 110, () => Roll(Dice.WithModifier("1d20", c.Ref), "Reflex save")),
+                    Kit.StatTile("WILL", () => Fmt.Sign(c.Will), "roll", 110, () => Roll(Dice.WithModifier("1d20", c.Will), "Will save"))),
+                Kit.SectionHeader("ABILITY SCORES"),
+                Tiles([.. Enum.GetValues<Ability>().Select(AbilityTile)]),
+                Kit.SectionHeader("CONDITIONS"),
+                new Row
                 {
-                    Ui.Text($"+{c.TempHp} temp", 12, Im.TempHp);
+                    Gap = 4,
+                    Wrap = true,
+                    LineGap = 2,
+                    Children = [.. Character.AllConditions.Select(ConditionBox)]
                 }
-            }
-
-            Im.HpBar(Id(1), c.Hp, c.MaxHp, c.TempHp, 12);
-            using (Ui.Row().Gap(6).Wrap().LineGap(6).AlignItems(UIAlign.Center).Open())
-            {
-                foreach (var button in _hpButtons)
-                {
-                    Ui.Draw(button);
-                }
-
-                Im.Spacer();
-                Im.Line("Damage eats temporary HP first", 11, theme.TextDisabled);
-            }
-        }
-
-        Im.SectionHeader("DEFENSE");
-        using (Ui.Row().Gap(8).Wrap().LineGap(8).Shrink(0).Open())
-        {
-            Im.StatTile(Id(10), "AC", Fmt.Int(c.Ac), "armor class", 92, false);
-            Im.StatTile(Id(11), "TOUCH", Fmt.Int(c.Touch), "", 76, false);
-            Im.StatTile(Id(12), "FLAT", Fmt.Int(c.FlatFooted), "", 76, false);
-            if (Im.StatTile(Id(13), "CMB", Fmt.Sign(c.Cmb), "roll", 76, true, "Combat maneuver bonus"))
-            {
-                Roll(Dice.WithModifier("1d20", c.Cmb), "Combat maneuver");
-            }
-
-            Im.StatTile(Id(14), "CMD", Fmt.Int(c.Cmd), "", 76, false, "Combat maneuver defense");
-        }
-
-        Im.SectionHeader("SAVING THROWS");
-        using (Ui.Row().Gap(8).Wrap().LineGap(8).Shrink(0).Open())
-        {
-            if (Im.StatTile(Id(20), "FORTITUDE", Fmt.Sign(c.Fort), "roll", 110, true))
-            {
-                Roll(Dice.WithModifier("1d20", c.Fort), "Fortitude save");
-            }
-
-            if (Im.StatTile(Id(21), "REFLEX", Fmt.Sign(c.Ref), "roll", 110, true))
-            {
-                Roll(Dice.WithModifier("1d20", c.Ref), "Reflex save");
-            }
-
-            if (Im.StatTile(Id(22), "WILL", Fmt.Sign(c.Will), "roll", 110, true))
-            {
-                Roll(Dice.WithModifier("1d20", c.Will), "Will save");
-            }
-        }
-
-        Im.SectionHeader("ABILITY SCORES");
-        using (Ui.Row().Gap(8).Wrap().LineGap(8).Shrink(0).Open())
-        {
-            for (var i = 0; i < 6; i++)
-            {
-                var ability = (Ability)i;
-                if (Im.StatTile(Id(30 + (uint)i), Character.AbilityNames[i], Fmt.Int(c.Score(ability)), Fmt.Sign(c.Mod(ability)), 74, true, "Click to roll an ability check"))
-                {
-                    Roll(Dice.WithModifier("1d20", c.Mod(ability)), $"{Character.AbilityNames[i]} check");
-                }
-            }
-        }
-
-        Im.SectionHeader("CONDITIONS");
-        using (Ui.Row().Gap(4).Wrap().LineGap(2).Shrink(0).Open())
-        {
-            foreach (var (name, checkbox) in _conditions)
-            {
-                checkbox.Checked = c.Conditions.Contains(name);
-                Ui.Draw(checkbox);
-            }
-        }
+            ]
+        };
     }
 
-    private void DrawSkills()
+    private Widget HitPoints()
     {
-        var theme = Ui.Theme;
-        if (_appliedFilter != _skillFilter.Text)
-        {
-            _appliedFilter = _skillFilter.Text;
-            _visibleSkills.Clear();
-            foreach (var skill in Character.Skills)
-            {
-                if (skill.Name.Contains(_appliedFilter, StringComparison.OrdinalIgnoreCase))
-                {
-                    _visibleSkills.Add(skill);
-                }
-            }
-
-            _skillList.Count = _visibleSkills.Count;
-            _skillList.SelectedIndex = -1;
-        }
-
-        Ui.Draw(_skillFilter);
-        using (Ui.Row().Padding(22, 0, 24, 0).Gap(12).Shrink(0).Open())
-        {
-            using (Ui.Row().Fill().Open())
-            {
-                Im.Line("SKILL", 10, theme.TextMuted);
-            }
-
-            using (Ui.Row().Width(36).Open())
-            {
-                Im.Line("ABIL", 10, theme.TextMuted);
-            }
-
-            using (Ui.Row().Width(40).Open())
-            {
-                Im.Line("RANKS", 10, theme.TextMuted);
-            }
-
-            using (Ui.Row().Width(54).Justify(UIJustify.Center).Open())
-            {
-                Im.Line("TOTAL", 10, theme.TextMuted);
-            }
-        }
-
-        if (_visibleSkills.Count == 0)
-        {
-            Im.Empty(FontAwesome.MagnifyingGlass, "No skills match", "Try a shorter filter.");
-            return;
-        }
-
-        Ui.Draw(_skillList);
-        Im.Line("Accent dot = class skill (+3 with a rank). Click a total or double-click a row to roll.", 11, theme.TextDisabled);
-    }
-
-    private void DrawSkillRow(int index, bool selected)
-    {
-        var theme = Ui.Theme;
-        var skill = _visibleSkills[index];
         var c = Character;
-        var classSkill = c.IsClassSkill(skill);
-        Ui.Element().Size(6, 6).Shrink(0).CornerRadius(3).Background(classSkill ? theme.Accent : theme.Border).Leaf();
-        using (Ui.Row().Fill().Open())
+        return new Column
         {
-            Im.Line(skill.Name, 14, selected ? theme.Accent : theme.Text);
-        }
-
-        using (Ui.Row().Width(36).Shrink(0).Open())
-        {
-            Im.Line(Character.AbilityNames[(int)skill.Ability], 11, theme.TextMuted);
-        }
-
-        using (Ui.Row().Width(40).Shrink(0).Open())
-        {
-            var ranks = c.RanksIn(skill);
-            Im.Line(ranks > 0 ? Fmt.Int(ranks) : "-", 13, ranks > 0 ? theme.Text : theme.TextDisabled);
-        }
-
-        var totalId = Id(1000 + (uint)Array.IndexOf(Character.Skills, skill));
-        if (Im.Chip(totalId, null, Fmt.Sign(c.SkillTotal(skill)), selected ? ChipKind.Accent : ChipKind.Normal, $"Roll {skill.Name}"))
-        {
-            RollSkill(skill);
-        }
+            Style = Kit.Card,
+            Children =
+            [
+                new Row
+                {
+                    Gap = 8,
+                    Children =
+                    [
+                        new Icon(FontAwesome.Heart) { Size = 13, Color = Palette.Bad },
+                        new Label("Hit Points", TextStyle.Sized(13)),
+                        new Spacer(),
+                        new Label(() => $"{c.Hp} / {c.MaxHp}", TextStyle.Sized(16)),
+                        new Label(() => $"+{c.TempHp} temp", TextStyle.Sized(12, Palette.TempHp)) { Visible = Bind(() => c.TempHp > 0) }
+                    ]
+                },
+                Kit.HpBar(c, 12),
+                new Row
+                {
+                    Gap = 6,
+                    Wrap = true,
+                    LineGap = 6,
+                    Children =
+                    [
+                        HpButton("-5", "Take 5 damage", () => _campaign.Damage(c, 5)),
+                        HpButton("-1", "Take 1 damage", () => _campaign.Damage(c, 1)),
+                        HpButton("+1", "Heal 1", () => _campaign.Heal(c, 1)),
+                        HpButton("+5", "Heal 5", () => _campaign.Heal(c, 5)),
+                        new Spacer(),
+                        new Label("Damage eats temporary HP first", TextStyle.Sized(11, Color.TextDisabled))
+                    ]
+                }
+            ]
+        };
     }
 
-    private void DrawCombat()
+    private static Button HpButton(string text, string tooltip, Action action)
     {
-        var theme = Ui.Theme;
+        return new Button(text) { Small = true, Tooltip = tooltip, OnClick = action };
+    }
+
+    private Widget AbilityTile(Ability ability)
+    {
         var c = Character;
-        using (Ui.Row().Gap(8).Wrap().LineGap(8).Shrink(0).Open())
-        {
-            if (Im.StatTile(Id(100), "INITIATIVE", Fmt.Sign(c.InitBonus), "roll", 110, true))
-            {
-                Roll(Dice.WithModifier("1d20", c.InitBonus), "Initiative");
-            }
-
-            Im.StatTile(Id(101), "BAB", Fmt.Sign(c.Bab), "", 80, false, "Base attack bonus");
-            Im.StatTile(Id(102), "SPEED", $"{c.Speed} ft", "", 90, false);
-        }
-
-        Im.SectionHeader("ATTACKS");
-        for (var i = 0; i < c.Attacks.Count; i++)
-        {
-            var attack = c.Attacks[i];
-            using (Ui.Column().Gap(6).Padding(12).Shrink(0).Background(theme.SurfaceAlt).Border(theme.Border, 1).CornerRadius(8).Open())
-            {
-                using (Ui.Row().Gap(8).AlignItems(UIAlign.Center).Wrap().LineGap(6).Open())
-                {
-                    Im.Icon(FontAwesome.Crosshairs, 12, c.Color);
-                    Im.Line(attack.Name, 15, theme.Text);
-                    Im.Spacer();
-                    if (Im.Chip(Id(200 + (uint)i * 4), FontAwesome.Cube, _attackLabels[i], ChipKind.Accent))
-                    {
-                        Roll(Dice.WithModifier("1d20", attack.Bonus), $"{attack.Name} attack");
-                    }
-
-                    if (Im.Chip(Id(201 + (uint)i * 4), null, attack.Damage, tooltip: "Roll damage", enabled: attack.Damage != "varies"))
-                    {
-                        Roll(attack.Damage, $"{attack.Name} damage");
-                    }
-                }
-
-                using (Ui.Row().Gap(16).Open())
-                {
-                    Im.KeyValue("CRITICAL", attack.Critical);
-                    Im.KeyValue("DAMAGE", attack.Damage);
-                }
-
-                if (attack.Notes.Length > 0)
-                {
-                    Im.Para(attack.Notes, 12, theme.TextMuted);
-                }
-            }
-        }
+        var name = Character.AbilityNames[(int)ability];
+        return Kit.StatTile(name, () => Fmt.Int(c.Score(ability)), Fmt.Sign(c.Mod(ability)), 74,
+            () => Roll(Dice.WithModifier("1d20", c.Mod(ability)), $"{name} check"), "Click to roll an ability check");
     }
 
-    private void DrawSpells()
+    private Widget ConditionBox(string name)
     {
-        var theme = Ui.Theme;
+        var c = Character;
+        return new Checkbox(name)
+        {
+            BoxSize = 15,
+            Checked = Bind(() => c.Conditions.Contains(name), on => _campaign.SetCondition(c, name, on))
+        };
+    }
+
+    private Widget SkillsPage()
+    {
+        var list = new ListView<SkillDef>(() => Character.Skills, SkillRow)
+        {
+            RowPadding = (10, 6),
+            Filter = SkillMatches,
+            Selected = Bind(() => _selectedSkill, skill => _selectedSkill = skill),
+            OnActivate = RollSkill,
+            Visible = Bind(() => AnySkillMatches())
+        };
+        var empty = Kit.Empty(FontAwesome.MagnifyingGlass, "No skills match", () => "Try a shorter filter.");
+        empty.Visible = Bind(() => !AnySkillMatches());
+
+        return new Column
+        {
+            Flex = 1,
+            Padding = 12,
+            Gap = 8,
+            Children =
+            [
+                new TextField
+                {
+                    Width = UIValue.Auto,
+                    Placeholder = "Filter skills…",
+                    Text = Bind(() => _skillFilter, text =>
+                    {
+                        _skillFilter = text;
+                        _selectedSkill = null;
+                    })
+                },
+                new Row
+                {
+                    Padding = (28, 0, 24, 0),
+                    Gap = 12,
+                    Children =
+                    [
+                        new Label("SKILL", ColumnHeader) { Flex = 1 },
+                        new Label("ABIL", ColumnHeader) { Width = 36 },
+                        new Label("RANKS", ColumnHeader) { Width = 40 },
+                        new Label("TOTAL", ColumnHeader) { Width = 54, Align = UITextAlign.Center }
+                    ]
+                },
+                list,
+                empty,
+                new Label("Accent dot = class skill (+3 with a rank). Click a total or double-click a row to roll.", TextStyle.Sized(11, Color.TextDisabled))
+                {
+                    Visible = Bind(() => AnySkillMatches())
+                }
+            ]
+        };
+    }
+
+    private Widget SkillRow(SkillDef skill)
+    {
+        var c = Character;
+        var ranks = c.RanksIn(skill);
+        return new Row
+        {
+            Flex = 1,
+            Gap = 12,
+            Children =
+            [
+                new Row { Width = 6, Height = 6, Radius = 3, Background = c.IsClassSkill(skill) ? Color.Accent : Color.Border },
+                new Label(skill.Name, TextStyle.Sized(14))
+                {
+                    Flex = 1,
+                    Color = Bind(() => ReferenceEquals(_selectedSkill, skill) ? Color.Accent : Color.Text)
+                },
+                new Label(Character.AbilityNames[(int)skill.Ability], TextStyle.Sized(11, Color.TextMuted)) { Width = 36 },
+                new Label(ranks > 0 ? Fmt.Int(ranks) : "-", TextStyle.Sized(13, ranks > 0 ? Color.Text : Color.TextDisabled)) { Width = 40 },
+                new Button(Fmt.Sign(c.SkillTotal(skill))) { Small = true, Width = 54, Tooltip = $"Roll {skill.Name}", OnClick = () => RollSkill(skill) }
+            ]
+        };
+    }
+
+    private bool SkillMatches(SkillDef skill)
+    {
+        return skill.Name.Contains(_skillFilter, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private bool AnySkillMatches()
+    {
+        foreach (var skill in Character.Skills)
+        {
+            if (SkillMatches(skill))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private Widget CombatPage()
+    {
+        var c = Character;
+        return new ScrollView
+        {
+            Padding = 14,
+            Gap = 10,
+            Children =
+            [
+                Tiles(
+                    Kit.StatTile("INITIATIVE", () => Fmt.Sign(c.InitBonus), "roll", 110, () => Roll(Dice.WithModifier("1d20", c.InitBonus), "Initiative")),
+                    Kit.StatTile("BAB", () => Fmt.Sign(c.Bab), "", 80, null, "Base attack bonus"),
+                    Kit.StatTile("SPEED", () => $"{c.Speed} ft", "", 90)),
+                Kit.SectionHeader("ATTACKS"),
+                .. c.Attacks.Select(AttackCard)
+            ]
+        };
+    }
+
+    private Widget AttackCard(Attack attack)
+    {
+        var c = Character;
+        var card = new Column
+        {
+            Style = Kit.Card with { Gap = 6 },
+            Children =
+            [
+                new Row
+                {
+                    Gap = 8,
+                    Wrap = true,
+                    LineGap = 6,
+                    Children =
+                    [
+                        new Icon(FontAwesome.Crosshairs) { Size = 12, Color = c.Color },
+                        new Label(attack.Name, TextStyle.Sized(15)),
+                        new Spacer(),
+                        new Button($"Attack {Fmt.Sign(attack.Bonus)}", FontAwesome.Cube)
+                        {
+                            Tone = Tone.Primary,
+                            Small = true,
+                            OnClick = () => Roll(Dice.WithModifier("1d20", attack.Bonus), $"{attack.Name} attack")
+                        },
+                        new Button(attack.Damage)
+                        {
+                            Small = true,
+                            Tooltip = "Roll damage",
+                            Enabled = attack.Damage != "varies",
+                            OnClick = () => Roll(attack.Damage, $"{attack.Name} damage")
+                        }
+                    ]
+                },
+                new Row
+                {
+                    Gap = 16,
+                    Align = UIAlign.Start,
+                    Children = [Kit.KeyValue("CRITICAL", attack.Critical), Kit.KeyValue("DAMAGE", attack.Damage)]
+                }
+            ]
+        };
+        if (attack.Notes.Length > 0)
+        {
+            card.Children.Add(new Paragraph(attack.Notes, TextStyle.Sized(12, Color.TextMuted)));
+        }
+
+        return card;
+    }
+
+    private Widget SpellsPage()
+    {
         var c = Character;
         if (c.Spells.Count == 0)
         {
-            Im.Empty(FontAwesome.Lightbulb, "No spellcasting", $"{c.Name} doesn't prepare or cast spells. Switch to a caster's sheet to see spell cards and slots.");
-            return;
+            return Kit.Empty(FontAwesome.Lightbulb, "No spellcasting",
+                () => $"{c.Name} doesn't prepare or cast spells. Switch to a caster's sheet to see spell cards and slots.");
         }
 
-        Im.SectionHeader("SPELL SLOTS");
+        var page = new ScrollView { Padding = 14, Gap = 8 };
+        page.Children.Add(Kit.SectionHeader("SPELL SLOTS"));
         for (var level = 0; level < c.SpellSlots.Length; level++)
         {
-            var slots = c.SpellSlots[level];
-            using (Ui.Row().Gap(6).AlignItems(UIAlign.Center).Shrink(0).Open())
-            {
-                using (Ui.Row().Width(76).Shrink(0).Open())
-                {
-                    Im.Line(level == 0 ? "Cantrips" : $"Level {level}", 13, theme.Text);
-                }
-
-                if (level == 0)
-                {
-                    Im.Line("at will", 12, theme.TextMuted);
-                    continue;
-                }
-
-                var used = c.SpellSlotsUsed[level];
-                for (var k = 0; k < slots; k++)
-                {
-                    var pip = Id(400 + (uint)(level * 16 + k));
-                    var spent = k < used;
-                    var hovered = Ui.Interaction(pip).Hovered;
-                    Ui.Element(pip).Size(16, 16).Shrink(0).CornerRadius(8)
-                        .Background(spent ? default : hovered ? theme.AccentHover : theme.Accent)
-                        .Border(hovered ? theme.AccentHover : theme.Accent, 1.5f)
-                        .Cursor(SystemCursor.Pointer)
-                        .Animate()
-                        .Leaf();
-                    if (Ui.Interaction(pip).Clicked)
-                    {
-                        c.SpellSlotsUsed[level] = spent ? k : k + 1;
-                    }
-                }
-
-                Ui.Text($"  {slots - used} of {slots} left", 12, theme.TextMuted);
-            }
+            page.Children.Add(SlotRow(level));
         }
 
         for (var level = 0; level < 10; level++)
         {
-            var any = false;
+            var header = false;
             foreach (var spell in c.Spells)
             {
                 if (spell.Level != level)
@@ -419,173 +396,267 @@ public sealed class CharacterSheet
                     continue;
                 }
 
-                if (!any)
+                if (!header)
                 {
-                    Im.SectionHeader(level == 0 ? "CANTRIPS" : $"LEVEL {level}");
-                    any = true;
+                    page.Children.Add(Kit.SectionHeader(level == 0 ? "CANTRIPS" : $"LEVEL {level}"));
+                    header = true;
                 }
 
-                DrawSpell(spell);
+                page.Children.Add(SpellCard(spell));
             }
         }
+
+        return page;
     }
 
-    private void DrawSpell(Spell spell)
+    private Widget SlotRow(int level)
     {
-        var theme = Ui.Theme;
         var c = Character;
-        var index = (uint)c.Spells.IndexOf(spell);
-        var headerId = Id(300 + index * 2);
-        var castId = Id(301 + index * 2);
-        var header = Ui.Interaction(headerId);
-        var expanded = _expanded.Contains(spell);
-        var canCast = spell.Level == 0 || c.SpellSlotsUsed[spell.Level] < c.SpellSlots[spell.Level];
-        var cast = false;
-
-        using (Ui.Column().Shrink(0).Background(theme.SurfaceAlt).Border(expanded ? theme.BorderStrong : theme.Border, 1).CornerRadius(8).Clip().Animate().Open())
+        var slots = c.SpellSlots[level];
+        var row = new Row { Gap = 6, Children = [new Label(level == 0 ? "Cantrips" : $"Level {level}", TextStyle.Sized(13)) { Width = 76 }] };
+        if (level == 0)
         {
-            using (Ui.Row(headerId).Padding(10, 8).Gap(8).AlignItems(UIAlign.Center).Background(header.Hovered ? theme.Hover : default).Cursor(SystemCursor.Pointer).Open())
-            {
-                Im.Icon(expanded ? FontAwesome.AngleDown : FontAwesome.AngleRight, 12, theme.TextMuted);
-                Im.Line(spell.Name, 14, theme.Text);
-                using (Ui.Row().Fill().Open())
-                {
-                    Im.Line(spell.School, 12, theme.TextMuted);
-                }
-
-                cast = Im.Chip(castId, FontAwesome.Star, "Cast", ChipKind.Accent, canCast ? null : "No slots left at this level", canCast);
-            }
-
-            if (expanded)
-            {
-                using (Ui.Column().Padding(12, 2, 12, 12).Gap(10)
-                           .Enter(UITransitionState.FromOpacity(0).WithOffset(new Vector2(0, -6)))
-                           .Open())
-                {
-                    using (Ui.Row().Wrap().Gap(18).LineGap(8).Open())
-                    {
-                        Im.KeyValue("CASTING TIME", spell.CastingTime);
-                        Im.KeyValue("RANGE", spell.Range);
-                        Im.KeyValue("DURATION", spell.Duration);
-                        Im.KeyValue("SAVE", spell.Save);
-                    }
-
-                    Im.Para(spell.Description, 14, theme.Text, 21);
-                }
-            }
+            row.Children.Add(new Label("at will", TextStyle.Sized(12, Color.TextMuted)));
+            return row;
         }
 
-        if (cast)
+        for (var k = 0; k < slots; k++)
         {
-            if (spell.Level > 0)
-            {
-                c.SpellSlotsUsed[spell.Level]++;
-            }
+            row.Children.Add(SlotPip(level, k));
+        }
 
-            _campaign.Chat.Post(MessageKind.Emote, c.Name, c.Color, $"casts {spell.Name}.");
-        }
-        else if (header.Clicked)
-        {
-            if (!_expanded.Remove(spell))
-            {
-                _expanded.Add(spell);
-            }
-        }
+        row.Children.Add(new Label(() => $"  {slots - c.SpellSlotsUsed[level]} of {slots} left", TextStyle.Sized(12, Color.TextMuted)));
+        return row;
     }
 
-    private void DrawInventory()
+    private Widget SlotPip(int level, int k)
     {
-        var theme = Ui.Theme;
         var c = Character;
-        using (Ui.Row().Gap(8).AlignItems(UIAlign.Center).Shrink(0).Open())
+        var pip = new Row
         {
-            Im.Icon(FontAwesome.Cube, 12, theme.TextMuted);
-            Ui.Text($"{c.Inventory.Count} items · {c.CarriedWeight:0.#} lb carried", 13, theme.Text);
-            Im.Spacer();
-            Im.Icon(FontAwesome.Circle, 10, Im.Warn);
-            Ui.Text($"{c.Gold} gp", 13, theme.Text);
+            Width = 16,
+            Height = 16,
+            Radius = 8,
+            Border = new Border(Color.Accent, 1.5f),
+            HoverBorder = Color.AccentHover,
+            OnClick = () => c.SpellSlotsUsed[level] = k < c.SpellSlotsUsed[level] ? k : k + 1
+        };
+        pip.Background = Bind(() => k < c.SpellSlotsUsed[level] ? Color.Transparent : pip.IsHovered ? Color.AccentHover : Color.Accent);
+        return pip;
+    }
+
+    private Widget SpellCard(Spell spell)
+    {
+        var expanded = false;
+        return new Column
+        {
+            Background = Color.SurfaceAlt,
+            BorderColor = Bind(() => expanded ? Color.BorderStrong : Color.Border),
+            Radius = 8,
+            Clip = true,
+            Animate = UITransitionPropertyFlagBits.Colors,
+            Children =
+            [
+                new Row
+                {
+                    Padding = (10, 8),
+                    Gap = 8,
+                    HoverBackground = Color.Hover,
+                    OnClick = () => expanded = !expanded,
+                    Children =
+                    [
+                        new Icon(() => expanded ? FontAwesome.AngleDown : FontAwesome.AngleRight) { Size = 12, Color = Color.TextMuted },
+                        new Label(spell.Name, TextStyle.Sized(14)),
+                        new Label(spell.School, TextStyle.Sized(12, Color.TextMuted)) { Flex = 1 },
+                        new Button("Cast", FontAwesome.Star)
+                        {
+                            Tone = Tone.Primary,
+                            Small = true,
+                            Enabled = Bind(() => CanCast(spell)),
+                            Tooltip = Bind<string?>(() => CanCast(spell) ? null : "No slots left at this level"),
+                            OnClick = () => Cast(spell)
+                        }
+                    ]
+                },
+                new Column
+                {
+                    Padding = (12, 2, 12, 12),
+                    Gap = 10,
+                    Visible = Bind(() => expanded),
+                    Enter = Motion.SlideDown,
+                    Children =
+                    [
+                        new Row
+                        {
+                            Wrap = true,
+                            Gap = 18,
+                            LineGap = 8,
+                            Align = UIAlign.Start,
+                            Children =
+                            [
+                                Kit.KeyValue("CASTING TIME", spell.CastingTime),
+                                Kit.KeyValue("RANGE", spell.Range),
+                                Kit.KeyValue("DURATION", spell.Duration),
+                                Kit.KeyValue("SAVE", spell.Save)
+                            ]
+                        },
+                        new Paragraph(spell.Description, TextStyle.Sized(14) with { LineHeight = 21 })
+                    ]
+                }
+            ]
+        };
+    }
+
+    private bool CanCast(Spell spell)
+    {
+        var c = Character;
+        return spell.Level == 0 || c.SpellSlotsUsed[spell.Level] < c.SpellSlots[spell.Level];
+    }
+
+    private void Cast(Spell spell)
+    {
+        var c = Character;
+        if (spell.Level > 0)
+        {
+            c.SpellSlotsUsed[spell.Level]++;
         }
 
-        var remove = -1;
-        using (Ui.Column(Id(500)).Fill().ScrollY().Gap(2).Padding(0, 0, 10, 0).Background(theme.Surface).Open())
+        _campaign.Chat.Post(MessageKind.Emote, c.Name, c.Color, $"casts {spell.Name}.");
+    }
+
+    private Widget GearPage()
+    {
+        var c = Character;
+        var newItem = "";
+        var inventory = new ListView<Item>(() => c.Inventory, ItemRow)
         {
-            for (var i = 0; i < c.Inventory.Count; i++)
+            Gap = 2,
+            Padding = (0, 0, 10, 0),
+            Background = Color.Surface,
+            Striped = true,
+            RowPadding = (10, 5),
+            RowRadius = 5
+        };
+
+        void AddItem()
+        {
+            var name = newItem.Trim();
+            if (name.Length == 0)
             {
-                var item = c.Inventory[i];
-                var rowId = Id(510 + (uint)i * 4);
-                var hovered = Ui.Interaction(rowId).Hovered;
-                using (Ui.Row(rowId).Padding(10, 5).Gap(8).AlignItems(UIAlign.Center).Shrink(0).CornerRadius(5)
-                           .Background(hovered ? theme.Hover : (i & 1) == 1 ? theme.SurfaceAlt : default).Open())
+                return;
+            }
+
+            c.Inventory.Add(new Item { Name = name });
+            newItem = "";
+            inventory.ScrollToEnd();
+        }
+
+        return new Column
+        {
+            Flex = 1,
+            Padding = 12,
+            Gap = 8,
+            Children =
+            [
+                new Row
                 {
-                    using (Ui.Column().Fill().Open())
-                    {
-                        Im.Para(item.Name, 14, theme.Text);
-                    }
+                    Gap = 8,
+                    Children =
+                    [
+                        new Icon(FontAwesome.Cube) { Size = 12, Color = Color.TextMuted },
+                        new Label(() => $"{c.Inventory.Count} items · {c.CarriedWeight:0.#} lb carried", TextStyle.Sized(13)),
+                        new Spacer(),
+                        new Icon(FontAwesome.Circle) { Size = 10, Color = Palette.Warn },
+                        new Label(() => $"{c.Gold} gp", TextStyle.Sized(13))
+                    ]
+                },
+                inventory,
+                new Row
+                {
+                    Gap = 6,
+                    Children =
+                    [
+                        new TextField
+                        {
+                            Flex = 1,
+                            Placeholder = "Add an item and press Enter",
+                            Text = Bind(() => newItem, text => newItem = text),
+                            OnSubmit = _ => AddItem()
+                        },
+                        new Button("Add", FontAwesome.Plus) { OnClick = AddItem }
+                    ]
+                }
+            ]
+        };
+    }
 
-                    if (Im.Chip(rowId + 1, FontAwesome.Minus, "", ChipKind.Subtle, enabled: item.Quantity > 1))
+    private Widget ItemRow(Item item)
+    {
+        var c = Character;
+        return new Row
+        {
+            Flex = 1,
+            Gap = 8,
+            Children =
+            [
+                new Paragraph(item.Name, TextStyle.Sized(14)),
+                new Spacer(),
+                new Button
+                {
+                    Icon = FontAwesome.Minus,
+                    Tone = Tone.Ghost,
+                    Small = true,
+                    Enabled = Bind(() => item.Quantity > 1),
+                    OnClick = () => item.Quantity--
+                },
+                new Label(() => Fmt.Int(item.Quantity), TextStyle.Sized(13)) { Width = 26, Align = UITextAlign.Center },
+                new Button { Icon = FontAwesome.Plus, Tone = Tone.Ghost, Small = true, OnClick = () => item.Quantity++ },
+                new Label(() => $"{item.Weight * item.Quantity:0.##} lb", TextStyle.Sized(12, Color.TextMuted)) { Width = 56, Align = UITextAlign.Right },
+                new Button
+                {
+                    Icon = FontAwesome.TrashCan,
+                    Tone = Tone.Ghost,
+                    Small = true,
+                    Tooltip = "Remove",
+                    OnClick = () =>
                     {
-                        item.Quantity--;
-                    }
-
-                    using (Ui.Row().Width(26).Justify(UIJustify.Center).Shrink(0).Open())
-                    {
-                        Im.Line(Fmt.Int(item.Quantity), 13, theme.Text);
-                    }
-
-                    if (Im.Chip(rowId + 2, FontAwesome.Plus, "", ChipKind.Subtle))
-                    {
-                        item.Quantity++;
-                    }
-
-                    using (Ui.Row().Width(56).Justify(UIJustify.End).Shrink(0).Open())
-                    {
-                        Ui.Text($"{item.Weight * item.Quantity:0.##} lb", 12, theme.TextMuted);
-                    }
-
-                    if (Im.Chip(rowId + 3, FontAwesome.TrashCan, "", ChipKind.Subtle, "Remove"))
-                    {
-                        remove = i;
+                        _campaign.Chat.System($"{c.Name} dropped {item.Name}.");
+                        c.Inventory.Remove(item);
                     }
                 }
-            }
-        }
-
-        if (remove >= 0)
-        {
-            _campaign.Chat.System($"{c.Name} dropped {c.Inventory[remove].Name}.");
-            c.Inventory.RemoveAt(remove);
-        }
-
-        using (Ui.Row().Gap(6).AlignItems(UIAlign.Center).Shrink(0).Open())
-        {
-            Ui.Draw(_newItem);
-            Ui.Draw(_addItem);
-        }
+            ]
+        };
     }
 
-    private void AddItem()
+    private Widget NotesPage()
     {
-        var name = _newItem.Text.Trim();
-        if (name.Length == 0)
+        var c = Character;
+        var notes = new TextArea
         {
-            return;
-        }
+            Flex = 1,
+            Placeholder = "Backstory, session notes, grudges…",
+            Text = Bind(() => c.Notes, text => c.Notes = text)
+        };
 
-        Character.Inventory.Add(new Item { Name = name });
-        _newItem.Clear();
-        Ui.ScrollToEnd(Id(500));
-    }
-
-    private void DrawNotes()
-    {
-        var theme = Ui.Theme;
-        using (Ui.Row().Gap(8).AlignItems(UIAlign.Center).Shrink(0).Open())
+        return new Column
         {
-            Im.Line("Private notes", 13, theme.Text);
-            Im.Spacer();
-            Ui.Text($"{_notes.LineCount} lines · {Character.Notes.Length} characters", 11, theme.TextMuted);
-        }
-
-        Ui.Draw(_notes);
+            Flex = 1,
+            Padding = 12,
+            Gap = 8,
+            Children =
+            [
+                new Row
+                {
+                    Gap = 8,
+                    Children =
+                    [
+                        new Label("Private notes", TextStyle.Sized(13)),
+                        new Spacer(),
+                        new Label(() => $"{notes.LineCount} lines · {c.Notes.Length} characters", TextStyle.Sized(11, Color.TextMuted))
+                    ]
+                },
+                notes
+            ]
+        };
     }
 }

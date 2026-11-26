@@ -1,35 +1,30 @@
 using System.Numerics;
-using NiziKit.UI.Widgets;
 using VttDemo.Model;
 using VttDemo.UiKit;
 
 namespace VttDemo.Views;
 
-// The battle map, drawn entirely with UI elements: terrain rectangles, grid lines and round tokens. Drag the floor to pan,
-// the wheel to zoom, drag tokens to move them (they snap to squares and show the distance), right-click for menus,
-// double-click the floor to ping.
-public sealed class MapView
+// The battle map: a Canvas, so terrain, grid lines, pings and tokens are flat drawing calls in map coordinates.
+// Input is handled in OnUpdate, before the frame is built: drag the floor to pan, drag tokens to move them (they snap to
+// squares and show the distance), right-click for menus, double-click the floor to ping.
+public sealed class MapView : Canvas
 {
     private const float BaseCell = 46;
 
-    private static readonly UIColor Void = UIColor.Hex(0x0C0D10FF);
-    private static readonly UIColor Floor = UIColor.Hex(0x2A2926FF);
-    private static readonly UIColor GridLine = UIColor.Hex(0xFFFFFF16);
-    private static readonly UIColor Wall = UIColor.Hex(0x4B4741FF);
-    private static readonly UIColor WallEdge = UIColor.Hex(0x67615AFF);
-    private static readonly UIColor Water = UIColor.Hex(0x1F4F78FF);
-    private static readonly UIColor Rubble = UIColor.Hex(0x3E362DFF);
-    private static readonly UIColor Carpet = UIColor.Hex(0x5E2633C8);
-    private static readonly UIColor Altar = UIColor.Hex(0x2F5D4AFF);
+    private static readonly Color Void = Color.Hex(0x0C0D10FF);
+    private static readonly Color Floor = Color.Hex(0x2A2926FF);
+    private static readonly Color GridLine = Color.Hex(0xFFFFFF16);
+    private static readonly Color Wall = Color.Hex(0x4B4741FF);
+    private static readonly Color WallEdge = Color.Hex(0x67615AFF);
+    private static readonly Color Water = Color.Hex(0x1F4F78FF);
+    private static readonly Color Rubble = Color.Hex(0x3E362DFF);
+    private static readonly Color Carpet = Color.Hex(0x5E2633C8);
+    private static readonly Color Altar = Color.Hex(0x2F5D4AFF);
+    private static readonly Color Shade = Color.Hex(0x000000C8);
 
     private readonly Campaign _campaign;
-    private readonly uint _viewportId = Ui.Id("Map.Viewport");
-    private readonly uint _contentId = Ui.Id("Map.Content");
-    private readonly uint _pingId = Ui.Id("Map.Ping");
-    private readonly Menu _tokenMenu = new();
-    private readonly Menu _floorMenu = new();
     private readonly List<Character> _drawOrder = new();
-    private readonly List<(uint Id, Vector2 Point, float Age, UIColor Color)> _pings = new();
+    private readonly List<(long Key, Vector2 Point, float Age, Color Color)> _pings = new();
 
     private Vector2 _pan = new(330, 30);
     private float _zoom = 1;
@@ -38,26 +33,29 @@ public sealed class MapView
     private bool _pressOnToken;
     private bool _panning;
     private Vector2 _panStart;
-    private uint _nextPing;
-    private UIRect _viewport;
+    private long _nextPing = 1L << 40;
+    private Rectangle _viewport;
     private float _zoomedAt = -1;
 
     public MapView(Campaign campaign)
     {
         _campaign = campaign;
+        Background = Void;
+        OnUpdate = HandleInput;
     }
 
     public Character? Selected { get; set; }
     public bool ShowGrid { get; set; } = true;
-    public bool IsHovered { get; private set; }
     public float Zoom => _zoom;
 
     public event Action<Character>? OpenSheet;
 
+    private float Cell => BaseCell * _zoom;
+
     public void ZoomAt(Vector2 pointer, float steps)
     {
         var target = Math.Clamp(_zoom * MathF.Pow(1.12f, steps), 0.4f, 2.5f);
-        var local = pointer - new Vector2(_viewport.X, _viewport.Y);
+        var local = pointer - _viewport.Position;
         _pan = local - (local - _pan) * (target / _zoom);
         _zoom = target;
         _zoomedAt = Ui.Time;
@@ -65,7 +63,7 @@ public sealed class MapView
 
     public void ZoomBy(float steps)
     {
-        ZoomAt(new Vector2(_viewport.X + _viewport.Width * 0.5f, _viewport.Y + _viewport.Height * 0.5f), steps);
+        ZoomAt(_viewport.Center, steps);
     }
 
     public void ResetView()
@@ -77,30 +75,28 @@ public sealed class MapView
 
     public void CenterOn(Character character)
     {
-        var cell = BaseCell * _zoom;
+        var cell = Cell;
         var center = new Vector2((character.CellX + character.SizeCells * 0.5f) * cell, (character.CellY + character.SizeCells * 0.5f) * cell);
-        _pan = new Vector2(_viewport.Width * 0.5f, _viewport.Height * 0.5f) - center;
+        _pan = _viewport.Size * 0.5f - center;
     }
 
-    public void Ping(Vector2 mapPoint, UIColor color)
+    public void Ping(Vector2 mapPoint, Color color)
     {
-        _pings.Add((Ui.Id(_pingId, ++_nextPing), mapPoint, 0, color));
+        _pings.Add((++_nextPing, mapPoint, 0, color));
     }
 
-    public void Draw(float dt)
+    private void HandleInput()
     {
-        var theme = Ui.Theme;
-        var cell = BaseCell * _zoom;
-        var view = Ui.Interaction(_viewportId);
-        _viewport = view.Rect;
-        IsHovered = view.Hovered;
+        var cell = Cell;
+        var view = Input;
+        _viewport = Bounds;
 
         var tokenPressStarted = false;
         var tokenRightClicked = false;
         foreach (var token in _campaign.Characters)
         {
-            var interaction = Ui.Interaction(token.TokenId);
-            if (interaction.PressStarted)
+            var hit = HitOf(token.Id);
+            if (hit.PressStarted)
             {
                 tokenPressStarted = true;
                 Selected = token;
@@ -110,12 +106,12 @@ public sealed class MapView
 
             if (ReferenceEquals(token, _dragToken))
             {
-                if (interaction.Dragging)
+                if (hit.Dragging)
                 {
-                    _dragDelta = interaction.DragDelta;
+                    _dragDelta = hit.DragDelta;
                 }
 
-                if (interaction.DragEnded || (!interaction.Pressed && !interaction.PressStarted))
+                if (hit.DragEnded || (!hit.Pressed && !hit.PressStarted))
                 {
                     if (_dragDelta != Vector2.Zero)
                     {
@@ -127,21 +123,21 @@ public sealed class MapView
                 }
             }
 
-            if (interaction.DoubleClicked)
+            if (hit.DoubleClicked)
             {
                 OpenSheet?.Invoke(token);
             }
 
-            if (interaction.RightClicked)
+            if (hit.RightClicked)
             {
                 tokenRightClicked = true;
                 Selected = token;
-                OpenTokenMenu(token);
+                TokenMenu(token).ShowAt(Ui.PointerPosition);
             }
 
-            if (interaction.Hovered && !interaction.Pressed)
+            if (hit.Hovered && !hit.Pressed)
             {
-                Ui.Tooltip(token.TokenId, token.Faction == Faction.Party
+                ShowTooltip(token.Id, token.Faction == Faction.Party
                     ? $"{token.Name} · {token.Hp}/{token.MaxHp} HP · AC {token.Ac}"
                     : $"{token.Name} · {HealthWord(token)}");
             }
@@ -171,34 +167,37 @@ public sealed class MapView
 
         if (view.RightClicked && !tokenRightClicked)
         {
-            OpenFloorMenu(ToMap(Ui.PointerPosition, cell));
+            FloorMenu(ToMap(Ui.PointerPosition, cell)).ShowAt(Ui.PointerPosition);
         }
 
-        using (Ui.Element(_viewportId)
-                   .Absolute(0, 0, 0, 0)
-                   .Clip()
-                   .Background(Void)
-                   .Cursor(_panning ? SystemCursor.Move : SystemCursor.Default)
-                   .Open())
+        Cursor = _panning ? SystemCursor.Move : SystemCursor.Default;
+        for (var i = _pings.Count - 1; i >= 0; i--)
         {
-            using (Ui.Element(_contentId)
-                       .Absolute(left: _pan.X, top: _pan.Y)
-                       .Size(_campaign.Columns * cell, _campaign.Rows * cell)
-                       .Background(Floor)
-                       .CornerRadius(4)
-                       .Open())
+            var ping = _pings[i];
+            ping.Age += Ui.DeltaTime;
+            if (ping.Age > 1.6f)
             {
-                DrawTerrain(cell);
-                if (ShowGrid)
-                {
-                    DrawGrid(cell);
-                }
-
-                DrawDragGhost(cell);
-                DrawPings(dt);
-                DrawTokens(cell, theme);
+                _pings.RemoveAt(i);
+                continue;
             }
+
+            _pings[i] = ping;
         }
+    }
+
+    protected override void Paint(Painter p)
+    {
+        var cell = Cell;
+        p.Box(new Rectangle(_pan.X, _pan.Y, _campaign.Columns * cell, _campaign.Rows * cell), new Paint { Background = Floor, Radius = 4 });
+        PaintTerrain(p, cell);
+        if (ShowGrid)
+        {
+            PaintGrid(p, cell);
+        }
+
+        PaintDragGhost(p, cell);
+        PaintPings(p, cell);
+        PaintTokens(p, cell);
     }
 
     private static string HealthWord(Character token)
@@ -209,7 +208,7 @@ public sealed class MapView
 
     private Vector2 ToMap(Vector2 pointer, float cell)
     {
-        return (pointer - new Vector2(_viewport.X, _viewport.Y) - _pan) / cell;
+        return (pointer - _viewport.Position - _pan) / cell;
     }
 
     private (int X, int Y) SnapTarget(Character token, float cell)
@@ -242,66 +241,47 @@ public sealed class MapView
         _campaign.Chat.System($"{token.Name} moves {feet} ft.");
     }
 
-    private void DrawTerrain(float cell)
+    private void PaintTerrain(Painter p, float cell)
     {
         var pulse = 0.5f + 0.5f * MathF.Sin(Ui.Time * 1.3f);
         foreach (var t in _campaign.Terrain)
         {
-            var element = Ui.Element()
-                .Absolute(left: t.X * cell, top: t.Y * cell)
-                .Size(t.Width * cell, t.Height * cell)
-                .Center()
-                .Passthrough();
-            switch (t.Kind)
+            var paint = t.Kind switch
             {
-                case TerrainKind.Wall:
-                    element.Background(Wall).Border(WallEdge, 1);
-                    break;
-                case TerrainKind.Water:
-                    element.Background(Im.Mix(Water, UIColor.Hex(0x2A6597FF), pulse * 0.35f)).Border(UIColor.Hex(0x3A78A8A0), 1).CornerRadius(cell * 0.3f);
-                    break;
-                case TerrainKind.Pillar:
-                    element.Background(WallEdge).Border(UIColor.Hex(0x8A8278FF), 2).CornerRadius(cell * 0.5f);
-                    break;
-                case TerrainKind.Rubble:
-                    element.Background(Rubble).Border(UIColor.Hex(0x57493AFF), 1).CornerRadius(cell * 0.2f);
-                    break;
-                case TerrainKind.Carpet:
-                    element.Background(Carpet);
-                    break;
-                case TerrainKind.Altar:
-                    element.Background(Altar).Border(UIColor.Hex(0x5E9C80FF), 2).CornerRadius(4);
-                    break;
+                TerrainKind.Wall => new Paint { Background = Wall, Border = WallEdge },
+                TerrainKind.Water => new Paint { Background = Color.Mix(Water, Color.Hex(0x2A6597FF), pulse * 0.35f), Border = Color.Hex(0x3A78A8A0), Radius = cell * 0.3f },
+                TerrainKind.Pillar => new Paint { Background = WallEdge, Border = Color.Hex(0x8A8278FF), BorderWidth = 2, Radius = cell * 0.5f },
+                TerrainKind.Rubble => new Paint { Background = Rubble, Border = Color.Hex(0x57493AFF), Radius = cell * 0.2f },
+                TerrainKind.Carpet => new Paint { Background = Carpet },
+                _ => new Paint { Background = Altar, Border = Color.Hex(0x5E9C80FF), BorderWidth = 2, Radius = 4 }
+            };
+            if (t.Label != null && _zoom > 0.6f)
+            {
+                paint.Text = t.Label;
+                paint.TextStyle = TextStyle.Sized(11 * _zoom, Color.Hex(0xFFFFFF80));
             }
 
-            using (element.Open())
-            {
-                if (t.Label != null && _zoom > 0.6f)
-                {
-                    var desc = Ui.TextStyle(11 * _zoom, UIColor.Hex(0xFFFFFF80));
-                    desc.Align = UITextAlign.Center;
-                    Ui.Text(t.Label, in desc);
-                }
-            }
+            p.Box(new Rectangle(_pan.X + t.X * cell, _pan.Y + t.Y * cell, t.Width * cell, t.Height * cell), paint);
         }
     }
 
-    private void DrawGrid(float cell)
+    private void PaintGrid(Painter p, float cell)
     {
         var width = _campaign.Columns * cell;
         var height = _campaign.Rows * cell;
+        var line = new Paint { Background = GridLine };
         for (var x = 1; x < _campaign.Columns; x++)
         {
-            Ui.Element().Absolute(left: x * cell, top: 0).Size(1, height).Background(GridLine).Passthrough().Leaf();
+            p.Box(new Rectangle(_pan.X + x * cell, _pan.Y, 1, height), line);
         }
 
         for (var y = 1; y < _campaign.Rows; y++)
         {
-            Ui.Element().Absolute(left: 0, top: y * cell).Size(width, 1).Background(GridLine).Passthrough().Leaf();
+            p.Box(new Rectangle(_pan.X, _pan.Y + y * cell, width, 1), line);
         }
     }
 
-    private void DrawDragGhost(float cell)
+    private void PaintDragGhost(Painter p, float cell)
     {
         if (_dragToken is not { } token || _dragDelta == Vector2.Zero)
         {
@@ -310,64 +290,35 @@ public sealed class MapView
 
         var (x, y) = SnapTarget(token, cell);
         var size = token.SizeCells * cell;
-        using (Ui.Element()
-                   .Absolute(left: x * cell, top: y * cell)
-                   .Size(size, size)
-                   .Background(UIColor.Hex(0xFFFFFF1C))
-                   .Border(UIColor.Hex(0xFFFFFFB0), 2)
-                   .CornerRadius(6)
-                   .Passthrough()
-                   .Open())
-        {
-            using (Ui.Row().Absolute(left: -60, right: -60, top: size + 4).Justify(UIJustify.Center).Open())
-            {
-                using (Ui.Row().Padding(8, 3).Background(UIColor.Hex(0x000000C0)).CornerRadius(4).Open())
-                {
-                    Ui.Text($"{Feet(x - token.CellX, y - token.CellY)} ft", 12, Im.White);
-                }
-            }
-        }
+        var origin = _pan + new Vector2(x * cell, y * cell);
+        p.Box(new Rectangle(origin.X, origin.Y, size, size), new Paint { Background = Color.Hex(0xFFFFFF1C), Border = Color.Hex(0xFFFFFFB0), BorderWidth = 2, Radius = 6 });
+        var feet = Fmt.Int(Feet(x - token.CellX, y - token.CellY));
+        Tag(p, $"{feet} ft", origin + new Vector2(size * 0.5f, size + 4), 12);
     }
 
-    private void DrawPings(float dt)
+    private void PaintPings(Painter p, float cell)
     {
-        for (var i = _pings.Count - 1; i >= 0; i--)
-        {
-            var ping = _pings[i];
-            ping.Age += dt;
-            if (ping.Age > 1.6f)
-            {
-                _pings.RemoveAt(i);
-                continue;
-            }
-
-            _pings[i] = ping;
-        }
-
-        var cell = BaseCell * _zoom;
         foreach (var ping in _pings)
         {
             var size = 64 * _zoom;
-            var center = ping.Point * cell;
-            using (Ui.Element(ping.Id)
-                       .Absolute(left: center.X - size * 0.5f, top: center.Y - size * 0.5f)
-                       .Size(size, size)
-                       .Center()
-                       .CornerRadius(size * 0.5f)
-                       .Border(ping.Color, 3)
-                       .Background(Im.Alpha(ping.Color, 50))
-                       .Passthrough()
-                       .Animate(UITransitionPropertyFlagBits.None, 0.45f, UIEasing.EaseOutBack)
-                       .Enter(UITransitionState.FromScale(0.2f).WithOpacity(0))
-                       .Exit(UITransitionState.FromOpacity(0).WithScale(1.8f))
-                       .Open())
+            var center = _pan + ping.Point * cell;
+            p.Box(new Rectangle(center.X - size * 0.5f, center.Y - size * 0.5f, size, size), new Paint
             {
-                Ui.Element().Size(10 * _zoom, 10 * _zoom).CornerRadius(5 * _zoom).Background(ping.Color).Leaf();
-            }
+                Background = ping.Color.WithAlpha(50),
+                Border = ping.Color,
+                BorderWidth = 3,
+                Radius = size * 0.5f,
+                Duration = 0.45f,
+                Easing = UIEasing.EaseOutBack,
+                Enter = UITransitionState.FromScale(0.2f).WithOpacity(0),
+                Exit = UITransitionState.FromOpacity(0).WithScale(1.8f)
+            }, ping.Key);
+            var dot = 10 * _zoom;
+            p.Box(new Rectangle(center.X - dot * 0.5f, center.Y - dot * 0.5f, dot, dot), new Paint { Background = ping.Color, Radius = dot * 0.5f });
         }
     }
 
-    private void DrawTokens(float cell, Theme theme)
+    private void PaintTokens(Painter p, float cell)
     {
         _drawOrder.Clear();
         foreach (var token in _campaign.Characters)
@@ -390,11 +341,12 @@ public sealed class MapView
 
         var current = _campaign.Current;
         var glow = (byte)(140 + 110 * (0.5f + 0.5f * MathF.Sin(Ui.Time * 4)));
+        var settled = Ui.Time - _zoomedAt > 0.3f;
         foreach (var token in _drawOrder)
         {
             var inset = 4 * _zoom;
             var size = token.SizeCells * cell - inset * 2;
-            var position = new Vector2(token.CellX * cell + inset, token.CellY * cell + inset);
+            var position = _pan + new Vector2(token.CellX * cell + inset, token.CellY * cell + inset);
             var dragging = ReferenceEquals(token, _dragToken);
             if (dragging)
             {
@@ -402,101 +354,117 @@ public sealed class MapView
             }
 
             var selected = ReferenceEquals(token, Selected);
-            var hovered = Ui.Interaction(token.TokenId).Hovered;
-            var ring = ReferenceEquals(token, current) ? Im.Alpha(Campaign.GmColor, glow)
-                : selected ? Im.White
-                : token.Faction == Faction.Party ? Im.Alpha(Im.White, 120) : UIColor.Hex(0x2A0E0CFF);
+            var isCurrent = ReferenceEquals(token, current);
+            var ring = isCurrent ? ((Color)Campaign.GmColor).WithAlpha(glow)
+                : selected ? Palette.White
+                : token.Faction == Faction.Party ? Palette.White.WithAlpha(120) : Color.Hex(0x2A0E0CFF);
+            var motion = !dragging && settled ? UITransitionPropertyFlagBits.Position : UITransitionPropertyFlagBits.None;
 
-            var element = Ui.Element(token.TokenId)
-                .Absolute(left: position.X, top: position.Y)
-                .Size(size, size)
-                .Center()
-                .Background(token.Color)
-                .Border(ring, selected || ReferenceEquals(token, current) ? 3 : 2)
-                .CornerRadius(size * 0.5f)
-                .Overlay(token.IsDown ? UIColor.Hex(0x000000A8) : default)
-                .Cursor(dragging ? SystemCursor.Move : SystemCursor.Pointer);
-            if (!dragging && Ui.Time - _zoomedAt > 0.3f)
+            var hit = p.Box(new Rectangle(position.X, position.Y, size, size), new Paint
             {
-                element.Animate(UITransitionPropertyFlagBits.Position | UITransitionPropertyFlagBits.OverlayColor, 0.18f);
+                Background = token.Color,
+                Border = ring,
+                BorderWidth = selected || isCurrent ? 3 : 2,
+                Radius = size * 0.5f,
+                Overlay = token.IsDown ? Color.Hex(0x000000A8) : Color.Transparent,
+                Cursor = dragging ? SystemCursor.Move : SystemCursor.Pointer,
+                Animate = motion | UITransitionPropertyFlagBits.OverlayColor,
+                Duration = 0.18f,
+                Text = token.IsDown ? FontAwesome.Xmark : token.Initials,
+                TextStyle = token.IsDown
+                    ? new TextStyle { Size = size * 0.42f, Color = Palette.White, Font = FontAwesome.FontId }
+                    : TextStyle.Sized(size * (token.SizeCells > 1 ? 0.26f : 0.36f), Palette.White)
+            }, token.Id);
+
+            if (token.Conditions.Count > 0)
+            {
+                var badge = 14 * _zoom;
+                p.Box(new Rectangle(position.X + size - badge + 2, position.Y - 2, badge, badge), new Paint
+                {
+                    Background = Palette.Warn,
+                    Radius = badge * 0.5f,
+                    Animate = motion,
+                    Duration = 0.18f,
+                    Text = Fmt.Int(token.Conditions.Count),
+                    TextStyle = TextStyle.Sized(9 * _zoom, Color.Hex(0x1A1A1AFF))
+                });
             }
 
-            using (element.Open())
+            var fraction = Math.Clamp(token.Hp / (float)token.MaxHp, 0, 1);
+            var barX = position.X + size * 0.12f;
+            var barWidth = size * 0.76f;
+            var barY = position.Y + size + 2 * _zoom;
+            var barHeight = 4 * _zoom;
+            p.Box(new Rectangle(barX, barY, barWidth, barHeight), new Paint { Background = Shade, Radius = 2, Animate = motion, Duration = 0.18f });
+            p.Box(new Rectangle(barX, barY, barWidth * fraction, barHeight), new Paint
             {
-                if (token.IsDown)
-                {
-                    Im.Icon(FontAwesome.Xmark, size * 0.42f, Im.White);
-                }
-                else
-                {
-                    var desc = Ui.TextStyle(size * (token.SizeCells > 1 ? 0.26f : 0.36f), Im.White);
-                    desc.Wrap = UITextWrap.None;
-                    Ui.Text(token.Initials, in desc);
-                }
+                Background = Palette.Hp(fraction),
+                Radius = 2,
+                Animate = motion | UITransitionPropertyFlagBits.Size,
+                Duration = 0.3f
+            });
 
-                if (token.Conditions.Count > 0)
-                {
-                    using (Ui.Row().Absolute(right: -2, top: -2).Size(14 * _zoom, 14 * _zoom).Center().Background(Im.Warn).CornerRadius(7 * _zoom).Open())
-                    {
-                        Ui.Text(Fmt.Int(token.Conditions.Count), 9 * _zoom, UIColor.Hex(0x1A1A1AFF));
-                    }
-                }
-
-                using (Ui.Row().Absolute(left: size * 0.12f, right: size * 0.12f, bottom: -6 * _zoom).Height(4 * _zoom).Open())
-                {
-                    using (Ui.Row().Fill().Background(UIColor.Hex(0x000000B0)).CornerRadius(2).Clip().Open())
-                    {
-                        var fraction = Math.Clamp(token.Hp / (float)token.MaxHp, 0, 1);
-                        Ui.Element().Width(UIValue.Percent(fraction)).Background(Im.HpColor(fraction)).Animate(UITransitionPropertyFlagBits.Size, 0.3f).Leaf();
-                    }
-                }
-
-                if (hovered || selected || dragging)
-                {
-                    using (Ui.Row().Absolute(left: -80, right: -80, top: size + 6 * _zoom).Justify(UIJustify.Center).Passthrough().Open())
-                    {
-                        using (Ui.Row().Padding(7, 2).Background(UIColor.Hex(0x000000C8)).CornerRadius(4).Open())
-                        {
-                            Im.Line(token.Name, 11, Im.White);
-                        }
-                    }
-                }
+            if (hit.Hovered || selected || dragging)
+            {
+                Tag(p, token.Name, new Vector2(position.X + size * 0.5f, position.Y + size + 6 * _zoom), 11);
             }
         }
     }
 
-    private void OpenTokenMenu(Character token)
+    private static void Tag(Painter p, string text, Vector2 topCenter, float size)
     {
-        var menu = _tokenMenu;
-        menu.ClearItems();
-        menu.Add("Open character sheet", () => OpenSheet?.Invoke(token), FontAwesome.User, "dbl-click");
-        menu.Add("Center view here", () => CenterOn(token), FontAwesome.Crosshairs);
-        menu.AddSeparator();
-        menu.Add("Damage 1", () => _campaign.Damage(token, 1), FontAwesome.Minus);
-        menu.Add("Damage 5", () => _campaign.Damage(token, 5), FontAwesome.Minus);
-        menu.Add("Damage 10", () => _campaign.Damage(token, 10), FontAwesome.Minus);
-        menu.Add("Heal 5", () => _campaign.Heal(token, 5), FontAwesome.Plus);
-        menu.Add("Heal to full", () => _campaign.Heal(token, token.MaxHp), FontAwesome.Heart);
-        menu.AddSeparator();
+        var style = TextStyle.Sized(size, Palette.White);
+        var measured = Ui.MeasureText(text, style);
+        var width = measured.X + 14;
+        var height = measured.Y + 4;
+        p.Box(new Rectangle(topCenter.X - width * 0.5f, topCenter.Y, width, height), new Paint { Background = Shade, Radius = 4, Text = text, TextStyle = style });
+    }
+
+    private Menu TokenMenu(Character token)
+    {
         var prone = token.Conditions.Contains("Prone");
-        menu.Add(prone ? "Stand up" : "Knock prone", () => _campaign.SetCondition(token, "Prone", !prone), FontAwesome.ArrowDown);
+        var menu = new Menu
+        {
+            Items =
+            [
+                new MenuItem("Open character sheet", FontAwesome.User, "dbl-click") { OnClick = () => OpenSheet?.Invoke(token) },
+                new MenuItem("Center view here", FontAwesome.Crosshairs) { OnClick = () => CenterOn(token) },
+                new MenuSeparator(),
+                new MenuItem("Damage 1", FontAwesome.Minus) { OnClick = () => _campaign.Damage(token, 1) },
+                new MenuItem("Damage 5", FontAwesome.Minus) { OnClick = () => _campaign.Damage(token, 5) },
+                new MenuItem("Damage 10", FontAwesome.Minus) { OnClick = () => _campaign.Damage(token, 10) },
+                new MenuItem("Heal 5", FontAwesome.Plus) { OnClick = () => _campaign.Heal(token, 5) },
+                new MenuItem("Heal to full", FontAwesome.Heart) { OnClick = () => _campaign.Heal(token, token.MaxHp) },
+                new MenuSeparator(),
+                new MenuItem(prone ? "Stand up" : "Knock prone", FontAwesome.ArrowDown) { OnClick = () => _campaign.SetCondition(token, "Prone", !prone) }
+            ]
+        };
         if (token.Attacks.Count > 0)
         {
             var attack = token.Attacks[0];
-            menu.Add($"Attack: {attack.Name}", () => _campaign.Roll(token.Name, Dice.WithModifier("1d20", attack.Bonus), $"{attack.Name} attack"), FontAwesome.Crosshairs);
+            menu.Items.Add(new MenuItem($"Attack: {attack.Name}", FontAwesome.Crosshairs)
+            {
+                OnClick = () => _campaign.Roll(token.Name, Dice.WithModifier("1d20", attack.Bonus), $"{attack.Name} attack")
+            });
         }
 
-        menu.Add("Ping token", () => Ping(new Vector2(token.CellX + token.SizeCells * 0.5f, token.CellY + token.SizeCells * 0.5f), token.Color), FontAwesome.LocationCrosshairs);
-        menu.ShowAt(Ui.PointerPosition);
+        menu.Items.Add(new MenuItem("Ping token", FontAwesome.LocationCrosshairs)
+        {
+            OnClick = () => Ping(new Vector2(token.CellX + token.SizeCells * 0.5f, token.CellY + token.SizeCells * 0.5f), token.Color)
+        });
+        return menu;
     }
 
-    private void OpenFloorMenu(Vector2 mapPoint)
+    private Menu FloorMenu(Vector2 mapPoint)
     {
-        var menu = _floorMenu;
-        menu.ClearItems();
-        menu.Add("Ping here", () => Ping(mapPoint, Campaign.GmColor), FontAwesome.LocationCrosshairs, "dbl-click");
-        menu.Add(ShowGrid ? "Hide grid" : "Show grid", () => ShowGrid = !ShowGrid, FontAwesome.BorderAll, "G");
-        menu.Add("Reset view", ResetView, FontAwesome.Compress);
-        menu.ShowAt(Ui.PointerPosition);
+        return new Menu
+        {
+            Items =
+            [
+                new MenuItem("Ping here", FontAwesome.LocationCrosshairs, "dbl-click") { OnClick = () => Ping(mapPoint, Campaign.GmColor) },
+                new MenuItem(ShowGrid ? "Hide grid" : "Show grid", FontAwesome.BorderAll, "G") { OnClick = () => ShowGrid = !ShowGrid },
+                new MenuItem("Reset view", FontAwesome.Compress) { OnClick = ResetView }
+            ]
+        };
     }
 }

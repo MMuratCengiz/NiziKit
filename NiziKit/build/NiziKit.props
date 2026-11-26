@@ -13,5 +13,6 @@
     <Using Include="NiziKit.Graphics.Renderer.Pass" />
     <Using Include="NiziKit.Graphics.Resources" />
     <Using Include="NiziKit.UI" />
+    <Using Include="NiziKit.UI.Binding" Static="true" />
   </ItemGroup>
 </Project>

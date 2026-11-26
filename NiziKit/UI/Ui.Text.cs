@@ -6,7 +6,7 @@ namespace NiziKit.UI;
 
 public static partial class Ui
 {
-    public static UITextDesc TextStyle(float size = 0, UIColor color = default, ushort fontId = 0)
+    internal static UITextDesc TextStyleOf(float size = 0, UIColor color = default, ushort fontId = 0)
     {
         var theme = Theme;
         return new UITextDesc
@@ -17,47 +17,43 @@ public static partial class Ui
         };
     }
 
-    public static uint Text(ReadOnlySpan<char> text)
+    internal static uint Text(ReadOnlySpan<char> text, float size, UIColor color, ushort fontId = 0)
     {
-        var desc = TextStyle();
+        var desc = TextStyleOf(size, color, fontId);
         return Native.Text(text, in desc);
     }
 
-    public static uint Text(ReadOnlySpan<char> text, float size, UIColor color, ushort fontId = 0)
-    {
-        var desc = TextStyle(size, color, fontId);
-        return Native.Text(text, in desc);
-    }
-
-    public static uint Text(ReadOnlySpan<char> text, in UITextDesc desc)
+    internal static uint Text(ReadOnlySpan<char> text, in UITextDesc desc)
     {
         return Native.Text(text, in desc);
     }
 
-    public static uint Text(ReadOnlySpan<byte> utf8, in UITextDesc desc)
+    internal static uint Text(ReadOnlySpan<byte> utf8, in UITextDesc desc)
     {
         return Native.Text(utf8, in desc);
     }
 
-    public static uint Text(ref FormattedText text)
+    internal static uint Line(ReadOnlySpan<char> text, float size, UIColor color, ushort fontId = 0)
     {
-        var desc = TextStyle();
-        return Native.Text(text.Text, in desc);
+        var desc = TextStyleOf(size, color, fontId);
+        desc.Wrap = UITextWrap.None;
+        desc.Overflow = UITextOverflow.Ellipsis;
+        return Native.Text(text, in desc);
     }
 
-    public static uint Text(ref FormattedText text, float size, UIColor color, ushort fontId = 0)
+    internal static void Glyph(string glyph, float size, UIColor color)
     {
-        var desc = TextStyle(size, color, fontId);
-        return Native.Text(text.Text, in desc);
+        if (FontAwesome.IsInitialized)
+        {
+            var desc = TextStyleOf(size, color, FontAwesome.FontId);
+            desc.Wrap = UITextWrap.None;
+            Native.Text(glyph, in desc);
+        }
     }
 
-    public static uint Text(ref FormattedText text, in UITextDesc desc)
+    public static Vector2 MeasureText(ReadOnlySpan<char> text, TextStyle style = default, float maxWidth = 0)
     {
-        return Native.Text(text.Text, in desc);
-    }
-
-    public static Vector2 MeasureText(ReadOnlySpan<char> text, in UITextDesc desc, float maxWidth = 0)
-    {
+        var desc = style.Resolve(Theme);
         return Native.MeasureText(text, in desc, maxWidth);
     }
 }
@@ -75,6 +71,13 @@ public ref struct FormattedText
     }
 
     public readonly ReadOnlySpan<char> Text => _buffer.AsSpan(0, _length);
+
+    public static implicit operator FormattedText(string? value)
+    {
+        var text = new FormattedText(0, 0);
+        text.AppendFormatted(value.AsSpan());
+        return text;
+    }
 
     public void AppendLiteral(string value)
     {

@@ -25,6 +25,7 @@ public sealed partial class Campaign
     public Campaign()
     {
         Characters = CreateCharacters();
+        Party = Characters.Where(c => c.Faction == Faction.Party).ToList();
         Terrain = CreateTerrain();
         Journal = CreateJournal();
         Order = new List<Character>(Characters);
@@ -37,7 +38,7 @@ public sealed partial class Campaign
     public int Rows => 24;
 
     public List<Character> Characters { get; }
-    public IEnumerable<Character> Party => Characters.Where(c => c.Faction == Faction.Party);
+    public IReadOnlyList<Character> Party { get; }
     public List<Terrain> Terrain { get; }
     public List<JournalEntry> Journal { get; }
     public ChatLog Chat { get; } = new();

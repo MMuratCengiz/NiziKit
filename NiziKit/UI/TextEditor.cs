@@ -2,7 +2,7 @@ using System.Numerics;
 using System.Text;
 using DenOfIz;
 
-namespace NiziKit.UI.Widgets;
+namespace NiziKit.UI;
 
 internal sealed class TextEditor
 {

@@ -1,7 +1,6 @@
 using System.Numerics;
 using DenOfIz;
 using NiziKit.Graphics;
-using NiziKit.UI.Widgets;
 using DzUI = DenOfIz.UI;
 using Semaphore = DenOfIz.Semaphore;
 
@@ -10,16 +9,31 @@ namespace NiziKit.UI;
 public static partial class Ui
 {
     private const float TooltipOffset = 6;
+    private const float NotificationLifetime = 3.5f;
+
+    private struct LayoutFrame
+    {
+        public bool Row;
+        public bool Scrolls;
+        public bool Fills;
+    }
+
+    private sealed class Notification
+    {
+        public uint Id;
+        public required string Text;
+        public Color Color;
+        public float Age;
+    }
 
     private static DzUI? _ui;
-    private static uint _nextWidgetId;
     private static uint _activateId;
     private static uint _tooltipId;
+    private static uint _notificationsId;
     private static uint _tooltipTarget;
     private static uint _tooltipOffer;
     private static float _tooltipTime;
-    private static char[] _tooltipText = new char[128];
-    private static int _tooltipLength;
+    private static string _tooltipText = "";
     private static int _focusables;
     private static int _frameFocusables;
     private static Widget? _focusedWidget;
@@ -27,13 +41,26 @@ public static partial class Ui
     private static SystemCursor _cursor;
     private static bool _textInputActive;
     private static float _scale = 1;
+    private static UIDebugFlagBits _debugFlags;
+    private static List<Widget> _built = new();
+    private static List<Widget> _previous = new();
+    private static readonly List<LayoutFrame> Layout = new();
+    private static readonly List<bool> EnabledStack = new();
+    private static readonly List<Notification> Notifications = new();
+    private static uint _nextNotification;
 
     internal static readonly List<Popup> OpenPopups = new();
     internal static Popup? BuildingPopup;
 
-    public static DzUI Native => _ui ?? throw new InvalidOperationException("Ui is not initialized; it is created with the GraphicsContext of a window.");
+    internal static DzUI Native => _ui ?? throw new InvalidOperationException("Ui is not initialized; it is created with the GraphicsContext of a window.");
 
     internal static bool IsInitialized => _ui != null;
+
+    internal static List<Widget> Built => _built;
+
+    internal static int FrameNumber { get; private set; }
+
+    public static Widget? Root { get; set; }
 
     public static Theme Theme { get; set; } = Theme.Dark();
 
@@ -61,24 +88,31 @@ public static partial class Ui
 
     public static UIDebugFlagBits DebugFlags
     {
-        set => Native.SetDebugFlags(value);
+        get => _debugFlags;
+        set
+        {
+            _debugFlags = value;
+            Native.SetDebugFlags(value);
+        }
     }
 
     public static bool IsPointerOverUi => _ui != null && _ui.IsPointerOverUI;
 
-    public static uint HoveredId => _ui?.HoveredId ?? 0;
-
     public static Vector2 PointerPosition => Native.PointerPosition;
 
-    public static uint Focus
+    public static Widget? FocusedWidget => _focusedWidget;
+
+    public static bool WantsTextInput => _textInputActive;
+
+    internal static uint Focus
     {
         get => _ui?.Focus ?? 0;
         set => Native.Focus = value;
     }
 
-    public static Widget? FocusedWidget => _focusedWidget;
+    internal static bool ParentEnabled => EnabledStack.Count == 0 || EnabledStack[^1];
 
-    public static bool WantsTextInput => _textInputActive;
+    internal static bool ParentIsRow => Layout.Count > 0 && Layout[^1].Row;
 
     public static void Initialize()
     {
@@ -99,6 +133,7 @@ public static partial class Ui
         });
         _ui.SetScale(_scale);
         _tooltipId = Id("NiziKit.Tooltip");
+        _notificationsId = Id("NiziKit.Notifications");
         FontAwesome.TryInitialize();
     }
 
@@ -116,6 +151,8 @@ public static partial class Ui
         }
 
         OpenPopups.Clear();
+        _built.Clear();
+        _previous.Clear();
         _focusedWidget = null;
         _frameFocusedWidget = null;
         _ui.Dispose();
@@ -146,21 +183,27 @@ public static partial class Ui
         }
     }
 
-    public static void BeginFrame(float deltaTime)
+    public static void Update(float deltaTime)
     {
-        Native.BeginFrame(deltaTime);
+        var ui = Native;
+        ui.BeginFrame(deltaTime);
         Fonts.ReleaseRemoved();
         DeltaTime = deltaTime;
         Time += deltaTime;
+        FrameNumber++;
         _frameFocusedWidget = null;
         _frameFocusables = 0;
         _tooltipOffer = 0;
-    }
 
-    public static void EndFrame()
-    {
-        var ui = Native;
+        (_previous, _built) = (_built, _previous);
+        _built.Clear();
+        Dispatch(_previous);
+
+        Layout.Clear();
+        EnabledStack.Clear();
+        Root?.BuildFrame();
         DeclarePopups(null);
+        DeclareNotifications();
         DeclareTooltip();
         ui.EndFrame();
 
@@ -199,39 +242,13 @@ public static partial class Ui
         return Native.RenderToTexture((uint)GraphicsContext.FrameIndex, waitSemaphores);
     }
 
-    public static void Draw(Widget widget)
+    public static void Notify(string text, Color color = default)
     {
-        widget.Build();
-    }
-
-    public static uint Id(ReadOnlySpan<char> name, uint seed = 0)
-    {
-        return DzUI.HashId(name, seed);
-    }
-
-    public static uint Id(uint parent, uint value)
-    {
-        return DzUI.CombineId(parent, value);
-    }
-
-    internal static uint NewWidgetId()
-    {
-        return DzUI.CombineId(0x4E5A4B57u, ++_nextWidgetId);
-    }
-
-    public static UIInteraction Interaction(uint id)
-    {
-        return Native.GetInteraction(id);
-    }
-
-    public static bool Activated(uint id, in UIInteraction interaction)
-    {
-        return interaction.Clicked || (_activateId != 0 && _activateId == id);
-    }
-
-    public static bool TryGetRect(uint id, out UIRect rect)
-    {
-        return Native.TryGetElementRect(id, out rect);
+        Notifications.Add(new Notification { Id = ++_nextNotification, Text = text, Color = color.IsSet ? color : Color.Accent });
+        if (Notifications.Count > 4)
+        {
+            Notifications.RemoveAt(0);
+        }
     }
 
     public static void FocusNext(bool reverse = false)
@@ -239,41 +256,49 @@ public static partial class Ui
         Native.FocusNext(reverse);
     }
 
-    public static bool TryGetScroll(uint id, out UIScrollState state)
+    internal static uint Id(ReadOnlySpan<char> name, uint seed = 0)
+    {
+        return DzUI.HashId(name, seed);
+    }
+
+    internal static uint Id(uint parent, uint value)
+    {
+        return DzUI.CombineId(parent, value);
+    }
+
+    internal static UIInteraction Interaction(uint id)
+    {
+        return Native.GetInteraction(id);
+    }
+
+    internal static bool Activated(uint id, in UIInteraction interaction)
+    {
+        return interaction.Clicked || (_activateId != 0 && _activateId == id);
+    }
+
+    internal static bool TryGetRect(uint id, out UIRect rect)
+    {
+        return Native.TryGetElementRect(id, out rect);
+    }
+
+    internal static bool TryGetScroll(uint id, out UIScrollState state)
     {
         return Native.TryGetScrollState(id, out state);
     }
 
-    public static void ScrollTo(uint id, Vector2 offset)
+    internal static void ScrollTo(uint id, Vector2 offset)
     {
         Native.SetScrollOffset(id, offset);
     }
 
-    public static void ScrollToEnd(uint id)
-    {
-        var x = TryGetScroll(id, out var state) ? state.Offset.X : 0;
-        Native.SetScrollOffset(id, new Vector2(x, float.MaxValue));
-    }
-
-    public static void ScrollIntoView(uint id)
+    internal static void ScrollIntoView(uint id)
     {
         Native.ScrollIntoView(id);
     }
 
-    public static void Tooltip(uint targetId, ReadOnlySpan<char> text)
+    internal static void OfferTooltip(uint targetId, string text)
     {
-        if (targetId == 0 || text.IsEmpty)
-        {
-            return;
-        }
-
-        if (_tooltipText.Length < text.Length)
-        {
-            _tooltipText = new char[Math.Max(text.Length, _tooltipText.Length * 2)];
-        }
-
-        text.CopyTo(_tooltipText);
-        _tooltipLength = text.Length;
+        _tooltipText = text;
         _tooltipOffer = targetId;
     }
 
@@ -282,9 +307,42 @@ public static partial class Ui
         _frameFocusedWidget = widget;
     }
 
-    internal static void CountFocusable()
+    internal static void PushLayout(bool row, bool scrolls, bool fills = false)
     {
-        _frameFocusables++;
+        Layout.Add(new LayoutFrame { Row = row, Scrolls = scrolls, Fills = fills });
+    }
+
+    internal static bool ParentFills => Layout.Count > 0 && Layout[^1].Fills;
+
+    internal static void PopLayout()
+    {
+        Layout.RemoveAt(Layout.Count - 1);
+    }
+
+    internal static void PushEnabled(bool enabled)
+    {
+        EnabledStack.Add(enabled);
+    }
+
+    internal static void PopEnabled()
+    {
+        EnabledStack.RemoveAt(EnabledStack.Count - 1);
+    }
+
+    internal static float ShrinkFor(bool keepsSize, UIValue width, UIValue height)
+    {
+        if (keepsSize || Layout.Count == 0)
+        {
+            return 0;
+        }
+
+        var parent = Layout[^1];
+        if (!parent.Row || parent.Scrolls)
+        {
+            return 0;
+        }
+
+        return width.Type == UIValueType.Points ? 0 : 1;
     }
 
     internal static void DeclarePopups(Popup? layer)
@@ -298,7 +356,7 @@ public static partial class Ui
             }
 
             popup.ZIndex = 100 + i;
-            popup.Build();
+            popup.BuildFrame();
             if (i >= OpenPopups.Count || !ReferenceEquals(OpenPopups[i], popup))
             {
                 i--;
@@ -307,6 +365,69 @@ public static partial class Ui
     }
 
     internal static Popup? TopmostPopup => OpenPopups.Count > 0 ? OpenPopups[^1] : null;
+
+    private static void Dispatch(List<Widget> previous)
+    {
+        for (var i = 0; i < previous.Count; i++)
+        {
+            var widget = previous[i];
+            widget.State = widget.Interactive ? Native.GetInteraction(widget.Id) : default;
+            if (widget.State.Focused)
+            {
+                TrackFocused(widget);
+            }
+        }
+
+        for (var i = 0; i < previous.Count; i++)
+        {
+            previous[i].OnUpdate?.Invoke();
+        }
+
+        for (var i = previous.Count - 1; i >= 0; i--)
+        {
+            previous[i].Dispatch();
+        }
+    }
+
+    private static void DeclareNotifications()
+    {
+        for (var i = Notifications.Count - 1; i >= 0; i--)
+        {
+            if ((Notifications[i].Age += DeltaTime) > NotificationLifetime)
+            {
+                Notifications.RemoveAt(i);
+            }
+        }
+
+        var theme = Theme;
+        using (Element.Column(_notificationsId)
+                   .FloatOnViewport(UIAnchor.BottomCenter, UIAnchor.BottomCenter, new Vector2(0, -44))
+                   .ZIndex(5000, absolute: true)
+                   .Gap(8)
+                   .AlignItems(UIAlign.Center)
+                   .Passthrough()
+                   .Open())
+        {
+            foreach (var notification in Notifications)
+            {
+                using (Element.Row(Id(_notificationsId, notification.Id))
+                           .AlignItems(UIAlign.Center)
+                           .Gap(10)
+                           .Padding(16, 10)
+                           .Background(theme.TooltipBackground)
+                           .Border(notification.Color.Resolve(theme), 1)
+                           .CornerRadius(10)
+                           .Animate(UITransitionPropertyFlagBits.Position, 0.25f, UIEasing.EaseOutBack)
+                           .Enter(UITransitionState.FromOpacity(0).WithOffset(new Vector2(0, 16)).WithScale(0.94f))
+                           .Exit(UITransitionState.FromOpacity(0).WithScale(0.96f))
+                           .Open())
+                {
+                    Element.Box().Size(8, 8).CornerRadius(4).Background(notification.Color.Resolve(theme)).Leaf();
+                    Line(notification.Text, theme.FontSize, theme.TooltipText);
+                }
+            }
+        }
+    }
 
     private static void DeclareTooltip()
     {
@@ -326,7 +447,7 @@ public static partial class Ui
         }
 
         var theme = Theme;
-        using (Row(_tooltipId)
+        using (Element.Row(_tooltipId)
                    .Padding(8, 5)
                    .MaxWidth(320)
                    .Background(theme.TooltipBackground)
@@ -339,7 +460,7 @@ public static partial class Ui
                    .Exit(UITransitionState.FromOpacity(0))
                    .Open())
         {
-            Text(_tooltipText.AsSpan(0, _tooltipLength), theme.SmallFontSize, theme.TooltipText);
+            Text(_tooltipText, theme.SmallFontSize, theme.TooltipText);
         }
     }
 
@@ -351,7 +472,7 @@ public static partial class Ui
             return true;
         }
 
-        if (_focusedWidget is { Enabled: true } focused && focused.OnKeyDown(in key))
+        if (_focusedWidget is { EnabledNow: true } focused && focused.OnKeyDown(in key))
         {
             return true;
         }
@@ -394,7 +515,7 @@ public static partial class Ui
 
     private static unsafe bool HandleTextInput(StringView text)
     {
-        if (_focusedWidget is not { AcceptsTextInput: true, Enabled: true } focused || text.Chars == IntPtr.Zero || text.NumChars == 0)
+        if (_focusedWidget is not { AcceptsTextInput: true, EnabledNow: true } focused || text.Chars == IntPtr.Zero || text.NumChars == 0)
         {
             return false;
         }

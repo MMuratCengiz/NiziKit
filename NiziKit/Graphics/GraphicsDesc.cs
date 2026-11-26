@@ -13,7 +13,6 @@ public sealed class GraphicsDesc
     {
         Windows = APIPreferenceWindows.Directx12,
         Linux = APIPreferenceLinux.Vulkan,
-        OSX = APIPreferenceOSX.Metal,
-        Web = APIPreferenceWeb.Webgpu
+        OSX = APIPreferenceOSX.Metal
     };
 }

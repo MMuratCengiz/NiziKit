@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Numerics;
-using NiziKit.UI.Widgets;
 using VttDemo.Model;
 using VttDemo.UiKit;
 using VttDemo.Views;
@@ -8,7 +7,7 @@ using VttDemo.Views;
 namespace VttDemo;
 
 // A virtual tabletop shell: a menu bar, the battle map with floating windows over it, and a status bar.
-// Environment switches: VTTDEMO_FONT=<name|mono>, VTTDEMO_THEME=light, VTTDEMO_SPAM=<n>, VTTDEMO_OPEN=all,
+// Environment switches: VTTDEMO_FONT=<name|mono>, VTTDEMO_THEME=light, VTTDEMO_SCALE=1.5, VTTDEMO_SPAM=<n>, VTTDEMO_OPEN=all,
 // VTTDEMO_STATS=1 (print frame stats), VTTDEMO_SCRIPT=1 (drive a scripted tour, print stats, quit).
 internal sealed class VttGame() : Game(new GameDesc
 {
@@ -19,15 +18,10 @@ internal sealed class VttGame() : Game(new GameDesc
     Graphics = new GraphicsDesc { PresentMode = PresentMode.Fifo }
 })
 {
-    private const float MenuBarHeight = 44;
-    private const float StatusBarHeight = 26;
-
     private readonly bool _printStats = Environment.GetEnvironmentVariable("VTTDEMO_STATS") == "1";
     private readonly bool _script = Environment.GetEnvironmentVariable("VTTDEMO_SCRIPT") == "1";
     private readonly Stopwatch _uiTimer = new();
     private readonly Dictionary<Character, CharacterSheet> _sheets = new();
-    private readonly uint _rootId = Ui.Id("Vtt.Root");
-    private readonly uint _areaId = Ui.Id("Vtt.Area");
 
     private RenderFrame _frame = null!;
     private CycledTexture _color = null!;
@@ -38,20 +32,7 @@ internal sealed class VttGame() : Game(new GameDesc
     private InitiativeView _initiative = null!;
     private PartyView _party = null!;
     private JournalView _journal = null!;
-    private Toasts _toasts = null!;
-    private ConfirmDialog _confirm = null!;
     private SettingsDialog _settings = null!;
-    private Menu _gameMenu = null!;
-    private Menu _windowsMenu = null!;
-    private Menu _viewMenu = null!;
-    private Button _gameButton = null!;
-    private Button _windowsButton = null!;
-    private Button _viewButton = null!;
-    private Button _settingsButton = null!;
-    private Button _zoomOut = null!;
-    private Button _zoomIn = null!;
-    private Button _zoomReset = null!;
-    private Button _grid = null!;
 
     private float _uiMs;
     private float _fps = 60;
@@ -66,38 +47,45 @@ internal sealed class VttGame() : Game(new GameDesc
         _frame = new RenderFrame();
         _color = CycledTexture.ColorAttachment("VttColor");
 
-        _toasts = new Toasts();
         _campaign = new Campaign();
-        _campaign.Toast += (text, color) => _toasts.Show(text, color);
-        _desktop = new Desktop();
-        _confirm = new ConfirmDialog();
+        _campaign.Toast += (text, color) => Ui.Notify(text, color);
         _map = new MapView(_campaign);
         _map.OpenSheet += OpenSheet;
-
-        _chat = new ChatView(_campaign, _confirm);
+        _chat = new ChatView(_campaign);
         _initiative = new InitiativeView(_campaign, _map, OpenSheet);
         _party = new PartyView(_campaign, _map, OpenSheet);
         _journal = new JournalView(_campaign);
-        _desktop.Add(_party.Window);
-        _desktop.Add(_initiative.Window);
-        _desktop.Add(_journal.Window);
-        _desktop.Add(_chat.Window);
         _journal.Window.IsOpen = false;
+        _settings = new SettingsDialog(_map);
 
-        BuildMenus();
-        BuildMapToolbar();
+        _desktop = new Desktop
+        {
+            Flex = 1,
+            Children = [_map, SceneBanner(), MapToolbar()],
+            Windows = [_party.Window, _initiative.Window, _journal.Window, _chat.Window]
+        };
+        Ui.Root = new Column
+        {
+            Flex = 1,
+            Background = Color.Background,
+            Children = [MenuBar(), _desktop, StatusBar()]
+        };
 
         var font = Environment.GetEnvironmentVariable("VTTDEMO_FONT");
         var fontIndex = font == "mono" ? 0 : TextFonts.IndexOf(font ?? "Verdana");
         TextFonts.Apply(fontIndex >= 0 ? fontIndex : Math.Min(1, TextFonts.Available.Length - 1));
-        _settings = new SettingsDialog(_map, _toasts);
         if (Environment.GetEnvironmentVariable("VTTDEMO_THEME") == "light")
         {
-            _settings.ToggleTheme();
+            _settings.SetTheme(true);
+        }
+
+        if (float.TryParse(Environment.GetEnvironmentVariable("VTTDEMO_SCALE"), System.Globalization.CultureInfo.InvariantCulture, out var scale))
+        {
+            Ui.Scale = scale;
         }
 
         OpenSheet(_campaign.Characters[0]);
-        Arrange(Ui.ViewportSize - new Vector2(0, MenuBarHeight + StatusBarHeight));
+        Arrange(Ui.ViewportSize - new Vector2(0, 44 + 26));
         if (Environment.GetEnvironmentVariable("VTTDEMO_OPEN") == "all")
         {
             OpenEverything();
@@ -118,10 +106,7 @@ internal sealed class VttGame() : Game(new GameDesc
 
         _frame.BeginFrame();
         _uiTimer.Restart();
-        Ui.BeginFrame(dt);
-        _settings.Sync(_map);
-        DrawShell(dt);
-        Ui.EndFrame();
+        Ui.Update(dt);
         var uiMs = _uiTimer.Elapsed.TotalMilliseconds;
 
         var pass = _frame.BeginGraphicsPass();
@@ -164,13 +149,13 @@ internal sealed class VttGame() : Game(new GameDesc
             switch (key.KeyCode)
             {
                 case KeyCode.Equals or KeyCode.Plus or KeyCode.KeypadPlus:
-                    _settings.SetScale(Ui.Scale + 0.1f);
+                    SetScale(Ui.Scale + 0.1f);
                     break;
                 case KeyCode.Minus or KeyCode.KeypadMinus:
-                    _settings.SetScale(Ui.Scale - 0.1f);
+                    SetScale(Ui.Scale - 0.1f);
                     break;
                 case KeyCode.Num0:
-                    _settings.SetScale(1);
+                    SetScale(1);
                     break;
                 case KeyCode.Q:
                     Quit();
@@ -183,7 +168,7 @@ internal sealed class VttGame() : Game(new GameDesc
         switch (key.KeyCode)
         {
             case KeyCode.Return or KeyCode.KeypadEnter:
-                _desktop.Show(_chat.Window);
+                _chat.Window.Show();
                 _chat.FocusInput();
                 break;
             case KeyCode.N:
@@ -193,12 +178,22 @@ internal sealed class VttGame() : Game(new GameDesc
                 _map.ShowGrid = !_map.ShowGrid;
                 break;
             case KeyCode.F2:
-                _settings.ToggleOutlines();
+                ToggleOutlines();
                 break;
             case KeyCode.Escape:
                 _map.Selected = null;
                 break;
         }
+    }
+
+    private static void SetScale(float scale)
+    {
+        Ui.Scale = Math.Clamp(scale, 0.75f, 1.75f);
+    }
+
+    private static void ToggleOutlines()
+    {
+        Ui.DebugFlags = Ui.DebugFlags == UIDebugFlagBits.None ? UIDebugFlagBits.Outlines : UIDebugFlagBits.None;
     }
 
     private void OpenSheet(Character character)
@@ -207,17 +202,18 @@ internal sealed class VttGame() : Game(new GameDesc
         {
             sheet = new CharacterSheet(_campaign, character);
             var step = _sheets.Count % 6 * 30;
-            sheet.Window.Position = new Vector2(316 + step, 52 + step);
-            if (_desktop.AreaSize.Y > 0)
-            {
-                sheet.Window.Size = new Vector2(580, MathF.Min(680, _desktop.AreaSize.Y - 64 - step));
-            }
-
+            var height = _desktop.Area.Y > 0 ? MathF.Min(680, _desktop.Area.Y - 64 - step) : 660;
+            sheet.Window.Rect = new Rectangle(316 + step, 52 + step, 620, height);
             _sheets[character] = sheet;
             _desktop.Add(sheet.Window);
         }
 
-        _desktop.Show(sheet.Window);
+        sheet.Window.Show();
+    }
+
+    private bool IsSheetOpen(Character character)
+    {
+        return _sheets.TryGetValue(character, out var sheet) && sheet.Window.IsOpen;
     }
 
     private void OpenEverything()
@@ -227,267 +223,244 @@ internal sealed class VttGame() : Game(new GameDesc
             OpenSheet(character);
         }
 
-        _desktop.Show(_journal.Window);
-        _desktop.Show(_chat.Window);
+        _journal.Window.Show();
+        _chat.Window.Show();
     }
 
     private void Arrange(Vector2 area)
     {
-        _party.Window.Position = new Vector2(12, 12);
-        _party.Window.Size = new Vector2(290, 300);
-        _initiative.Window.Position = new Vector2(12, 324);
-        _initiative.Window.Size = new Vector2(290, MathF.Max(200, area.Y - 324 - 64));
-        _chat.Window.Size = new Vector2(410, MathF.Max(300, area.Y - 24));
-        _chat.Window.Position = new Vector2(MathF.Max(320, area.X - 422), 12);
-        _journal.Window.Size = new Vector2(560, MathF.Min(660, area.Y - 100));
-        _journal.Window.Position = new Vector2(MathF.Max(330, area.X * 0.5f - 280), 70);
+        foreach (var window in _desktop.Windows)
+        {
+            window.Collapsed = false;
+        }
+
+        _party.Window.Rect = new Rectangle(12, 12, 290, 300);
+        _initiative.Window.Rect = new Rectangle(12, 324, 290, MathF.Max(200, area.Y - 324 - 64));
+        _chat.Window.Rect = new Rectangle(MathF.Max(320, area.X - 422), 12, 410, MathF.Max(300, area.Y - 24));
+        _journal.Window.Rect = new Rectangle(MathF.Max(330, area.X * 0.5f - 280), 70, 560, MathF.Min(660, area.Y - 100));
         foreach (var (i, sheet) in _sheets.Values.Index())
         {
             var step = i % 6 * 30;
-            sheet.Window.Position = new Vector2(316 + step, 52 + step);
-            sheet.Window.Size = new Vector2(580, MathF.Min(680, area.Y - 64 - step));
+            sheet.Window.Rect = new Rectangle(316 + step, 52 + step, 620, MathF.Min(680, area.Y - 64 - step));
         }
     }
 
-    private void BuildMenus()
+    private Widget MenuBar()
     {
-        _gameMenu = new Menu();
-        _gameMenu.Add("Roll initiative", () => _campaign.RollInitiative(), FontAwesome.Cube, "/init");
-        _gameMenu.Add("Next turn", () => _campaign.NextTurn(), FontAwesome.AngleRight, "N");
-        _gameMenu.Add("Previous turn", () => _campaign.PreviousTurn(), FontAwesome.AngleLeft);
-        _gameMenu.AddSeparator();
-        _gameMenu.Add("Stress test: post 500 messages", () => _chat.Spam(500), FontAwesome.ChartBar, "/spam");
-        _gameMenu.Add("Settings…", () => _settings.ShowCentered(), FontAwesome.Gear);
-        _gameMenu.AddSeparator();
-        _gameMenu.Add("Quit", Quit, FontAwesome.Power, "Ctrl+Q");
-
-        _windowsMenu = new Menu();
-        _windowsMenu.Opened += _ => FillWindowsMenu();
-
-        _viewMenu = new Menu();
-        _viewMenu.Add("Zoom map in", () => _map.ZoomBy(1), FontAwesome.Plus, "Wheel");
-        _viewMenu.Add("Zoom map out", () => _map.ZoomBy(-1), FontAwesome.Minus, "Wheel");
-        _viewMenu.Add("Reset map view", () => _map.ResetView(), FontAwesome.Compress);
-        _viewMenu.Add("Toggle grid", () => _map.ShowGrid = !_map.ShowGrid, FontAwesome.BorderAll, "G");
-        _viewMenu.AddSeparator();
-        _viewMenu.Add("Larger interface", () => _settings.SetScale(Ui.Scale + 0.1f), FontAwesome.MagnifyingGlass, "Ctrl +");
-        _viewMenu.Add("Smaller interface", () => _settings.SetScale(Ui.Scale - 0.1f), null, "Ctrl -");
-        _viewMenu.Add("Actual size", () => _settings.SetScale(1), null, "Ctrl 0");
-        _viewMenu.AddSeparator();
-        _viewMenu.Add("Toggle light / dark theme", () => _settings.ToggleTheme(), FontAwesome.Sun);
-        _viewMenu.Add("Element outlines", () => _settings.ToggleOutlines(), FontAwesome.VectorSquare, "F2");
-
-        _gameButton = MenuButton("Game", _gameMenu);
-        _windowsButton = MenuButton("Windows", _windowsMenu);
-        _viewButton = MenuButton("View", _viewMenu);
-        _settingsButton = new Button { Icon = FontAwesome.Gear, Kind = ButtonKind.Ghost, Tooltip = "Settings", Padding = UILengthEdges.Symmetric(9, 6) };
-        _settingsButton.Clicked += _ => _settings.ShowCentered();
-    }
-
-    private static Button MenuButton(string text, Menu menu)
-    {
-        var button = new Button(text) { Kind = ButtonKind.Ghost, Padding = UILengthEdges.Symmetric(10, 6) };
-        button.Clicked += b => menu.Toggle(b);
-        return button;
-    }
-
-    private void FillWindowsMenu()
-    {
-        var menu = _windowsMenu;
-        menu.ClearItems();
-        Toggle(_chat.Window, "Enter");
-        Toggle(_initiative.Window, null);
-        Toggle(_party.Window, null);
-        Toggle(_journal.Window, null);
-        menu.AddSeparator();
-        foreach (var character in _campaign.Party)
+        return new Row
         {
-            var open = _sheets.TryGetValue(character, out var sheet) && sheet.Window.IsOpen;
-            menu.Add(character.Name, () => OpenSheet(character), open ? FontAwesome.Check : null);
-        }
-
-        menu.AddSeparator();
-        menu.Add("Open everything", OpenEverything, FontAwesome.LayerGroup);
-        menu.Add("Default layout", () =>
-        {
-            foreach (var window in _desktop.Windows)
-            {
-                window.Collapsed = false;
-            }
-
-            Arrange(_desktop.AreaSize);
-        }, FontAwesome.TableCells);
-        menu.Add("Cascade", () => _desktop.Cascade(), FontAwesome.Bars);
-        menu.Add("Close all sheets", () =>
-        {
-            foreach (var sheet in _sheets.Values)
-            {
-                sheet.Window.Close();
-            }
-        }, FontAwesome.WindowClose);
-        return;
-
-        void Toggle(FloatingWindow window, string? shortcut)
-        {
-            menu.Add(window.Title, () => _desktop.Toggle(window), window.IsOpen ? FontAwesome.Check : null, shortcut);
-        }
-    }
-
-    private void BuildMapToolbar()
-    {
-        _zoomOut = ToolButton(FontAwesome.Minus, "Zoom out", () => _map.ZoomBy(-1));
-        _zoomIn = ToolButton(FontAwesome.Plus, "Zoom in", () => _map.ZoomBy(1));
-        _zoomReset = ToolButton(FontAwesome.Compress, "Reset view", () => _map.ResetView());
-        _grid = ToolButton(FontAwesome.BorderAll, "Toggle grid (G)", () => _map.ShowGrid = !_map.ShowGrid);
-    }
-
-    private static Button ToolButton(string icon, string tooltip, Action action)
-    {
-        var button = new Button { Icon = icon, Kind = ButtonKind.Ghost, Tooltip = tooltip, Padding = UILengthEdges.Symmetric(9, 6) };
-        button.Clicked += _ => action();
-        return button;
-    }
-
-    private void DrawShell(float dt)
-    {
-        var theme = Ui.Theme;
-        using (Ui.Column(_rootId).Grow(1).Background(theme.Background).Open())
-        {
-            DrawMenuBar(theme);
-            using (Ui.Element(_areaId).Fill().Clip().Open())
-            {
-                _map.Draw(dt);
-                DrawSceneBanner(theme);
-                DrawMapToolbar(theme);
-                if (Ui.TryGetRect(_areaId, out var area))
+            Height = 44,
+            Padding = (10, 0),
+            Gap = 4,
+            Background = Color.Surface,
+            Border = Border.Bottom(Color.Border),
+            Children =
+            [
+                new Row
                 {
-                    _desktop.AreaSize = new Vector2(area.Width, area.Height);
-                }
-
-                _desktop.Draw();
-            }
-
-            DrawStatusBar(theme);
-        }
-
-        _toasts.Draw(dt);
+                    Width = 28,
+                    Height = 28,
+                    Justify = UIJustify.Center,
+                    Background = Color.Accent,
+                    Radius = 7,
+                    Children = [new Icon(FontAwesome.Cube) { Size = 14, Color = Color.OnAccent }]
+                },
+                new Column
+                {
+                    Margin = (4, 0, 12, 0),
+                    Children = [new Label("Lanterns & Lore"), new Label("NiziKit VTT proof of concept", TextStyle.Caption)]
+                },
+                new MenuButton("Game", GameMenu()),
+                new MenuButton("Windows", WindowsMenu()),
+                new MenuButton("View", ViewMenu()),
+                new Spacer(),
+                new Label("At the table:", TextStyle.Small),
+                new Row
+                {
+                    Gap = 4,
+                    Margin = (4, 0, 8, 0),
+                    Children = [.. _campaign.Party.Select(Presence)]
+                },
+                Kit.IconButton(FontAwesome.Gear, "Settings", _settings.Show)
+            ]
+        };
     }
 
-    private void DrawMenuBar(Theme theme)
+    private static Widget Presence(Character character)
     {
-        using (Ui.Row()
-                   .Height(MenuBarHeight)
-                   .Shrink(0)
-                   .Padding(10, 0)
-                   .Gap(4)
-                   .AlignItems(UIAlign.Center)
-                   .Background(theme.Surface)
-                   .Border(theme.Border, new UIEdges(0, 0, 0, 1))
-                   .Open())
+        var portrait = Kit.Portrait(character, 26);
+        portrait.Tooltip = character.Name;
+        return portrait;
+    }
+
+    private Menu GameMenu()
+    {
+        return new Menu
         {
-            using (Ui.Row().Size(28, 28).Shrink(0).Center().Background(theme.Accent).CornerRadius(7).Open())
-            {
-                Im.Icon(FontAwesome.Cube, 14, theme.OnAccent);
-            }
+            Items =
+            [
+                new MenuItem("Roll initiative", FontAwesome.Cube, "/init") { OnClick = _campaign.RollInitiative },
+                new MenuItem("Next turn", FontAwesome.AngleRight, "N") { OnClick = _campaign.NextTurn },
+                new MenuItem("Previous turn", FontAwesome.AngleLeft) { OnClick = _campaign.PreviousTurn },
+                new MenuSeparator(),
+                new MenuItem("Stress test: post 500 messages", FontAwesome.ChartBar, "/spam") { OnClick = () => _chat.Spam(500) },
+                new MenuItem("Settings…", FontAwesome.Gear) { OnClick = _settings.Show },
+                new MenuSeparator(),
+                new MenuItem("Quit", FontAwesome.Power, "Ctrl+Q") { OnClick = Quit }
+            ]
+        };
+    }
 
-            using (Ui.Column().Margin(4, 0, 12, 0).Shrink(0).Open())
-            {
-                Im.Line("Lanterns & Lore", 14, theme.Text);
-                Im.Line("NiziKit VTT proof of concept", 10, theme.TextMuted);
-            }
-
-            Ui.Draw(_gameButton);
-            Ui.Draw(_windowsButton);
-            Ui.Draw(_viewButton);
-            Im.Spacer();
-
-            Im.Line("At the table:", 12, theme.TextMuted);
-            using (Ui.Row().Gap(4).Margin(4, 0, 8, 0).Shrink(0).Open())
-            {
-                foreach (var pc in _campaign.Party)
+    private Menu WindowsMenu()
+    {
+        return new Menu
+        {
+            Items =
+            [
+                WindowItem(_chat.Window, "Enter"),
+                WindowItem(_initiative.Window),
+                WindowItem(_party.Window),
+                WindowItem(_journal.Window),
+                new MenuSeparator(),
+                new ForEach<Character>(() => _campaign.Party, pc => new MenuItem(pc.Name)
                 {
-                    var id = Ui.Id("Vtt.Presence", pc.Id);
-                    Im.Portrait(pc, 26, id);
-                    if (Ui.Interaction(id).Hovered)
+                    Checked = Bind(() => IsSheetOpen(pc)),
+                    OnClick = () => OpenSheet(pc)
+                }),
+                new MenuSeparator(),
+                new MenuItem("Open everything", FontAwesome.LayerGroup) { OnClick = OpenEverything },
+                new MenuItem("Default layout", FontAwesome.TableCells) { OnClick = () => Arrange(_desktop.Area) },
+                new MenuItem("Cascade", FontAwesome.Bars) { OnClick = _desktop.Cascade },
+                new MenuItem("Close all sheets", FontAwesome.WindowClose)
+                {
+                    OnClick = () =>
                     {
-                        Ui.Tooltip(id, pc.Name);
+                        foreach (var sheet in _sheets.Values)
+                        {
+                            sheet.Window.Close();
+                        }
                     }
                 }
-            }
-
-            Ui.Draw(_settingsButton);
-        }
+            ]
+        };
     }
 
-    private void DrawSceneBanner(Theme theme)
+    private static MenuItem WindowItem(FloatingWindow window, string? shortcut = null)
     {
-        var current = _campaign.Current;
-        using (Ui.Row().Absolute(left: 0, right: 0, top: 12).Justify(UIJustify.Center).Passthrough().Open())
+        return new MenuItem(window.Title, shortcut: shortcut) { Checked = Bind(() => window.IsOpen), OnClick = window.Toggle };
+    }
+
+    private Menu ViewMenu()
+    {
+        return new Menu
         {
-            using (Ui.Row().Padding(14, 6).Gap(10).AlignItems(UIAlign.Center).Background(UIColor.Hex(0x0B0C10E0)).Border(UIColor.Hex(0xFFFFFF1A), 1).CornerRadius(16).Open())
-            {
-                Im.Icon(FontAwesome.LocationCrosshairs, 11, Campaign.GmColor);
-                Im.Line(_campaign.SceneName, 13, Im.White);
-                Im.Line("·", 13, UIColor.Hex(0xFFFFFF60));
-                Ui.Text($"Round {_campaign.Round}", 13, UIColor.Hex(0xFFFFFFB0));
-                if (current != null)
+            Items =
+            [
+                new MenuItem("Zoom map in", FontAwesome.Plus, "Wheel") { OnClick = () => _map.ZoomBy(1) },
+                new MenuItem("Zoom map out", FontAwesome.Minus, "Wheel") { OnClick = () => _map.ZoomBy(-1) },
+                new MenuItem("Reset map view", FontAwesome.Compress) { OnClick = _map.ResetView },
+                new MenuItem("Show grid", FontAwesome.BorderAll, "G") { Checked = Bind(() => _map.ShowGrid), OnClick = () => _map.ShowGrid = !_map.ShowGrid },
+                new MenuSeparator(),
+                new MenuItem("Larger interface", FontAwesome.MagnifyingGlass, "Ctrl +") { OnClick = () => SetScale(Ui.Scale + 0.1f) },
+                new MenuItem("Smaller interface", shortcut: "Ctrl -") { OnClick = () => SetScale(Ui.Scale - 0.1f) },
+                new MenuItem("Actual size", shortcut: "Ctrl 0") { OnClick = () => SetScale(1) },
+                new MenuSeparator(),
+                new MenuItem("Light theme", FontAwesome.Sun) { Checked = Bind(() => _settings.Light), OnClick = () => _settings.SetTheme(!_settings.Light) },
+                new MenuItem("Element outlines", FontAwesome.VectorSquare, "F2") { Checked = Bind(() => Ui.DebugFlags != UIDebugFlagBits.None), OnClick = ToggleOutlines }
+            ]
+        };
+    }
+
+    private Widget SceneBanner()
+    {
+        var dim = Color.Hex(0xFFFFFF60);
+        var soft = Color.Hex(0xFFFFFFB0);
+        return new Row
+        {
+            Float = UIAnchor.TopCenter,
+            Offset = new Vector2(0, 12),
+            PassThrough = true,
+            Padding = (14, 6),
+            Gap = 10,
+            Background = Color.Hex(0x0B0C10E0),
+            Border = Color.Hex(0xFFFFFF1A),
+            Radius = 16,
+            Children =
+            [
+                new Icon(FontAwesome.LocationCrosshairs) { Size = 11, Color = Campaign.GmColor },
+                new Label(_campaign.SceneName, TextStyle.Sized(13, Palette.White)),
+                new Label("·", TextStyle.Sized(13, dim)),
+                new Label(() => $"Round {_campaign.Round}", TextStyle.Sized(13, soft)),
+                new Row
                 {
-                    Im.Line("·", 13, UIColor.Hex(0xFFFFFF60));
-                    Ui.Element().Size(8, 8).CornerRadius(4).Background(current.Color).Leaf();
-                    Ui.Text($"{current.Name}'s turn", 13, UIColor.Hex(0xFFFFFFB0));
+                    Gap = 10,
+                    Visible = Bind(() => _campaign.Current != null),
+                    Children =
+                    [
+                        new Label("·", TextStyle.Sized(13, dim)),
+                        new Row { Width = 8, Height = 8, Radius = 4, Background = Bind(() => _campaign.Current?.Color ?? default) },
+                        new Label(() => $"{_campaign.Current?.Name}'s turn", TextStyle.Sized(13, soft))
+                    ]
                 }
-            }
-        }
+            ]
+        };
     }
 
-    private void DrawMapToolbar(Theme theme)
+    private Widget MapToolbar()
     {
-        using (Ui.Row()
-                   .Absolute(left: 12, bottom: 12)
-                   .Padding(4)
-                   .Gap(2)
-                   .AlignItems(UIAlign.Center)
-                   .Background(theme.Surface)
-                   .Border(theme.Border, 1)
-                   .CornerRadius(8)
-                   .Open())
+        return new Row
         {
-            Ui.Draw(_zoomOut);
-            using (Ui.Row().Width(46).Justify(UIJustify.Center).Open())
-            {
-                Ui.Text($"{_map.Zoom * 100:0}%", 12, theme.TextMuted);
-            }
-
-            Ui.Draw(_zoomIn);
-            Ui.Draw(_zoomReset);
-            Ui.Element().Size(1, 18).Margin(4, 0).Background(theme.Border).Leaf();
-            _grid.Checked = _map.ShowGrid;
-            Ui.Draw(_grid);
-        }
+            Float = UIAnchor.BottomLeft,
+            Offset = new Vector2(12, -12),
+            Padding = 4,
+            Gap = 2,
+            Background = Color.Surface,
+            Border = Color.Border,
+            Radius = 8,
+            Children =
+            [
+                Kit.IconButton(FontAwesome.Minus, "Zoom out", () => _map.ZoomBy(-1)),
+                new Label(() => $"{_map.Zoom * 100:0}%", TextStyle.Small) { Width = 46, Align = UITextAlign.Center },
+                Kit.IconButton(FontAwesome.Plus, "Zoom in", () => _map.ZoomBy(1)),
+                Kit.IconButton(FontAwesome.Compress, "Reset view", _map.ResetView),
+                new Divider(),
+                new Button
+                {
+                    Icon = FontAwesome.BorderAll,
+                    Tone = Tone.Ghost,
+                    Tooltip = "Toggle grid (G)",
+                    Checked = Bind(() => _map.ShowGrid, on => _map.ShowGrid = on)
+                }
+            ]
+        };
     }
 
-    private void DrawStatusBar(Theme theme)
+    private Widget StatusBar()
     {
-        using (Ui.Row()
-                   .Height(StatusBarHeight)
-                   .Shrink(0)
-                   .Padding(12, 0)
-                   .Gap(16)
-                   .AlignItems(UIAlign.Center)
-                   .Background(theme.Surface)
-                   .Border(theme.Border, new UIEdges(0, 1, 0, 0))
-                   .Open())
+        return new Row
         {
-            using (Ui.Row().Gap(6).AlignItems(UIAlign.Center).Shrink(0).Open())
-            {
-                Ui.Element().Size(7, 7).CornerRadius(4).Background(Im.Good).Leaf();
-                Im.Line("Connected (simulated)", 11, theme.TextMuted);
-            }
-
-            Im.Line("Enter: chat · N: next turn · G: grid · Ctrl +/-: UI scale · F2: outlines · right-click tokens and messages", 11, theme.TextDisabled);
-            Im.Spacer();
-            Ui.Text($"{_fps:0} fps · UI {_uiMs:0.00} ms · {_campaign.Chat.Messages.Count} messages · {_desktop.OpenCount} windows · {Ui.Scale * 100:0}%", 11, theme.TextMuted);
-        }
+            Height = 26,
+            Padding = (12, 0),
+            Gap = 16,
+            Background = Color.Surface,
+            Border = Border.Top(Color.Border),
+            Children =
+            [
+                new Row
+                {
+                    Gap = 6,
+                    Children =
+                    [
+                        new Row { Width = 7, Height = 7, Radius = 4, Background = Palette.Good },
+                        new Label("Connected (simulated)", TextStyle.Sized(11, Color.TextMuted))
+                    ]
+                },
+                new Label("Enter: chat · N: next turn · G: grid · Ctrl +/-: UI scale · F2: outlines · right-click tokens and messages",
+                    TextStyle.Sized(11, Color.TextDisabled)) { Flex = 1 },
+                new Label(() => $"{_fps:0} fps · UI {_uiMs:0.00} ms · {_campaign.Chat.Messages.Count} messages · {_desktop.OpenCount} windows · {Ui.Scale * 100:0}%",
+                    TextStyle.Sized(11, Color.TextMuted))
+            ]
+        };
     }
 
     private void UpdateStats(float dt, double uiMs)
@@ -519,6 +492,26 @@ internal sealed class VttGame() : Game(new GameDesc
         _statsUiMax = 0;
     }
 
+    // Prints whether every open window's shown rectangle lies inside the desktop area.
+    private void CheckLayout(string label)
+    {
+        var area = _desktop.Area;
+        var outside = new List<string>();
+        foreach (var window in _desktop.Windows)
+        {
+            var r = window.ShownRect;
+            if (window.IsOpen && (r.X < -1 || r.Y < -1 || r.Right > area.X + 1 || r.Bottom > area.Y + 1))
+            {
+                outside.Add($"{window.Title} {r.X:0},{r.Y:0} {r.Width:0}x{r.Height:0}");
+            }
+        }
+
+        var chat = _chat.Window.ShownRect;
+        Console.WriteLine(
+            $"layout {label}: area {area.X:0}x{area.Y:0}, chat at {chat.X:0},{chat.Y:0} {chat.Width:0}x{chat.Height:0} (asked {_chat.Window.Rect.X:0},{_chat.Window.Rect.Y:0}), " +
+            (outside.Count == 0 ? $"all {_desktop.OpenCount} windows inside" : $"outside: {string.Join("; ", outside)}"));
+    }
+
     // A scripted tour for unattended runs: opens everything, flips through tabs, floods the chat, rescales, re-themes and quits.
     private void RunScript()
     {
@@ -535,12 +528,20 @@ internal sealed class VttGame() : Game(new GameDesc
             case 360:
                 _chat.Spam(1000);
                 break;
+            case 590:
+                CheckLayout("start at 1x");
+                break;
             case 600:
-                _settings.SetScale(1.25f);
+                SetScale(1.5f);
                 _campaign.RollInitiative();
                 break;
+            case 660:
+                CheckLayout("zoomed to 1.5x");
+                SetScale(1);
+                break;
             case 720:
-                _settings.ToggleTheme();
+                CheckLayout("back to 1x");
+                _settings.SetTheme(!_settings.Light);
                 break;
             case 840:
                 Quit();

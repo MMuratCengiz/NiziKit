@@ -5,7 +5,7 @@ namespace NiziKit.UI;
 public static class FontAwesome
 {
     public const ushort FontId = 1;
-    private const string ResourceName = "NiziKit.UI.Fonts.FontAwesome.dzfont.br";
+    private const string ResourceName = "NiziKit.UI.Fonts.FontAwesome.ttf";
 
     public const string AngleDown = "\uf107";
     public const string AngleLeft = "\uf104";

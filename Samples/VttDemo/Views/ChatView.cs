@@ -1,16 +1,8 @@
-using System.Numerics;
-using DenOfIz;
-using NiziKit.UI;
-using NiziKit.UI.Widgets;
 using VttDemo.Model;
 using VttDemo.UiKit;
 
 namespace VttDemo.Views;
 
-/// <summary>
-/// The chat log: word-wrapped messages and dice cards in a scroll view that follows the end until the user scrolls up,
-/// filter tabs, quick dice, a "speak as" picker and slash commands.
-/// </summary>
 public sealed class ChatView
 {
     private enum Filter
@@ -21,70 +13,69 @@ public sealed class ChatView
     }
 
     private static readonly int[] QuickDice = [4, 6, 8, 10, 12, 20, 100];
-    private static readonly string[] QuickDiceLabels = QuickDice.Select(d => $"d{d}").ToArray();
+    private static readonly Color WhisperTint = Color.Hex(0xA77BF3FF);
 
     private readonly Campaign _campaign;
-    private readonly ConfirmDialog _confirm;
-    private readonly uint _logId = Ui.Id("Chat.Log");
-    private readonly uint _jumpId = Ui.Id("Chat.Jump");
-    private readonly uint _diceId = Ui.Id("Chat.Dice");
-    private readonly Button[] _filters;
-    private readonly Button _clear;
     private readonly Dropdown _speaker;
-    private readonly TextBox _input;
-    private readonly Button _send;
-    private readonly Menu _messageMenu = new();
+    private readonly TextField _input;
+    private readonly ListView<ChatMessage> _log;
 
     private Filter _filter;
-    private bool _stick = true;
-    private bool _follow = true;
-    private int _pendingScroll;
     private int _unread;
-    private float _lastContentHeight;
-    private float _lastViewportHeight;
 
-    public ChatView(Campaign campaign, ConfirmDialog confirm)
+    public ChatView(Campaign campaign)
     {
         _campaign = campaign;
-        _confirm = confirm;
-
-        _filters =
-        [
-            FilterButton("All", Filter.All),
-            FilterButton("Rolls", Filter.Rolls),
-            FilterButton("Talk", Filter.Talk)
-        ];
-        _clear = new Button { Icon = FontAwesome.TrashCan, Kind = ButtonKind.Ghost, Tooltip = "Clear the chat log", Padding = UILengthEdges.Symmetric(8, 5) };
-        _clear.Clicked += _ => ConfirmClear();
-
-        _speaker = new Dropdown(new[] { Campaign.GmName }.Concat(campaign.Party.Select(c => c.Name))) { Width = 150, Tooltip = "Speak as" };
-        _input = new TextBox { Placeholder = "Message, or /help", Fill = true, MaxLength = 2000 };
-        _input.Submitted += _ => Submit();
-        _send = new Button { Icon = FontAwesome.PaperPlane, Kind = ButtonKind.Primary, Tooltip = "Send (Enter)", Padding = UILengthEdges.Symmetric(10, 7) };
-        _send.Clicked += _ => Submit();
+        _speaker = new Dropdown([Campaign.GmName, .. campaign.Party.Select(c => c.Name)]) { Width = 150, Selected = 0, Tooltip = "Speak as" };
+        _input = new TextField { Placeholder = "Message, or /help", Flex = 1, MaxLength = 2000, OnSubmit = _ => Submit() };
+        _log = new ListView<ChatMessage>(() => campaign.Chat.Messages, MessageRow)
+        {
+            Filter = Matches,
+            FollowEnd = true,
+            Padding = (8, 8, 14, 8),
+            Gap = 2,
+            OnReachEnd = () => _unread = 0
+        };
 
         campaign.Chat.Posted += _ =>
         {
-            _follow = true;
-            if (!_stick)
+            if (!_log.IsAtEnd)
             {
                 _unread++;
             }
         };
 
-        Window = new FloatingWindow("Chat", Im.View(Draw)) { Icon = FontAwesome.Comments, MinSize = new Vector2(300, 260) };
+        var root = new Column
+        {
+            Flex = 1,
+            Children =
+            [
+                Header(),
+                LogArea(),
+                QuickDiceRow(),
+                Composer(),
+                new Label("Enter sends · /r 2d6+3 Label · /me · /w name · /ooc · /init · /next · /spam 500", TextStyle.Hint) { Margin = (10, 0, 10, 8) }
+            ]
+        };
+        Window = new FloatingWindow("Chat", root) { Icon = FontAwesome.Comments, MinSize = new(300, 260) };
     }
 
     public FloatingWindow Window { get; }
 
-    public string Speaker => _speaker.SelectedItem ?? Campaign.GmName;
+    public string Speaker
+    {
+        get
+        {
+            var index = _speaker.Selected.Value;
+            return index >= 0 && index < _speaker.Items.Count ? _speaker.Items[index] : Campaign.GmName;
+        }
+    }
 
     public void FocusInput()
     {
         _input.Focus();
     }
 
-    /// <summary>Posts <paramref name="count"/> mixed messages to stress the log's layout and text.</summary>
     public void Spam(int count)
     {
         var random = new Random(count);
@@ -111,128 +102,87 @@ public sealed class ChatView
         _campaign.Chat.System($"Stress test: posted {count} messages.");
     }
 
-    private Button FilterButton(string text, Filter filter)
+    private Widget Header()
     {
-        var button = new Button(text) { Kind = ButtonKind.Ghost, FontSize = 12, Padding = UILengthEdges.Symmetric(10, 4) };
-        button.Clicked += _ =>
+        return new Row
         {
-            _filter = filter;
-            _stick = true;
-            _follow = true;
-            _unread = 0;
+            Padding = (8, 6),
+            Gap = 2,
+            Border = Border.Bottom(Color.Border),
+            Children =
+            [
+                new Segmented<Filter>([new(Filter.All, "All"), new(Filter.Rolls, "Rolls"), new(Filter.Talk, "Talk")])
+                {
+                    Selected = Bind(() => _filter, value =>
+                    {
+                        _filter = value;
+                        JumpToEnd();
+                    })
+                },
+                new Spacer(),
+                new Label(() => $"{_campaign.Chat.Messages.Count} messages", TextStyle.Small),
+                Kit.IconButton(FontAwesome.TrashCan, "Clear the chat log", ConfirmClear)
+            ]
         };
-        return button;
     }
 
-    private void Draw()
+    private Widget LogArea()
     {
-        var theme = Ui.Theme;
-        TrackScroll();
-
-        using (Ui.Row().Padding(8, 6).Gap(2).AlignItems(UIAlign.Center).Shrink(0).Border(theme.Border, new UIEdges(0, 0, 0, 1)).Open())
+        return new Column
         {
-            for (var i = 0; i < _filters.Length; i++)
-            {
-                _filters[i].Checked = (int)_filter == i;
-                Ui.Draw(_filters[i]);
-            }
-
-            Im.Spacer();
-            Ui.Text($"{_campaign.Chat.Messages.Count} messages", 11, theme.TextMuted);
-            Ui.Draw(_clear);
-        }
-
-        using (Ui.Column().Fill().Open())
-        {
-            using (Ui.Column(_logId).Fill().ScrollY().Padding(8, 8, 14, 8).Gap(2).Open())
-            {
-                var messages = _campaign.Chat.Messages;
-                for (var i = 0; i < messages.Count; i++)
+            Flex = 1,
+            Children =
+            [
+                _log,
+                new Button(() => $"{_unread} new {(_unread == 1 ? "message" : "messages")}", FontAwesome.ArrowDown)
                 {
-                    if (Matches(messages[i]))
-                    {
-                        DrawMessage(messages[i]);
-                    }
+                    Float = UIAnchor.BottomCenter,
+                    Offset = new(0, -10),
+                    Tone = Tone.Primary,
+                    Small = true,
+                    Visible = Bind(() => _unread > 0),
+                    OnClick = JumpToEnd
                 }
-            }
-
-            if (!_stick && _unread > 0)
-            {
-                using (Ui.Row().Absolute(left: 0, right: 0, bottom: 10).Justify(UIJustify.Center).Passthrough().Open())
-                {
-                    if (Im.Chip(_jumpId, FontAwesome.ArrowDown, _unread == 1 ? "1 new message" : $"{_unread} new messages", ChipKind.Accent))
-                    {
-                        _stick = true;
-                        _follow = true;
-                        _unread = 0;
-                    }
-                }
-            }
-        }
-
-        using (Ui.Row().Padding(8, 6).Gap(4).Wrap().LineGap(4).AlignItems(UIAlign.Center).Shrink(0).Border(theme.Border, new UIEdges(0, 1, 0, 0)).Open())
-        {
-            Im.Icon(FontAwesome.Cube, 11, theme.TextMuted);
-            for (var i = 0; i < QuickDice.Length; i++)
-            {
-                if (Im.Chip(Ui.Id(_diceId, (uint)i), null, QuickDiceLabels[i], tooltip: $"Roll 1d{QuickDice[i]} as {Speaker}"))
-                {
-                    _campaign.Roll(Speaker, $"1d{QuickDice[i]}", null);
-                }
-            }
-        }
-
-        using (Ui.Row().Padding(8, 0, 8, 6).Gap(6).AlignItems(UIAlign.Center).Shrink(0).Open())
-        {
-            Ui.Draw(_speaker);
-            Ui.Draw(_input);
-            Ui.Draw(_send);
-        }
-
-        using (Ui.Row().Padding(10, 0, 10, 8).Shrink(0).Open())
-        {
-            Im.Line("Enter sends · /r 2d6+3 Label · /me · /w name · /ooc · /init · /next · /spam 500", 11, theme.TextDisabled);
-        }
-
-        if (_follow && _stick)
-        {
-            Ui.ScrollToEnd(_logId);
-            _pendingScroll = 3;
-        }
-
-        _follow = false;
+            ]
+        };
     }
 
-    /// <summary>Follows the end of the log while the user is at the bottom, and keeps following when wrapping or new content grows it.</summary>
-    private void TrackScroll()
+    private Widget QuickDiceRow()
     {
-        if (!Ui.TryGetScroll(_logId, out var scroll))
+        return new Row
         {
-            return;
-        }
+            Padding = (8, 6),
+            Gap = 4,
+            Wrap = true,
+            LineGap = 4,
+            Border = Border.Top(Color.Border),
+            Children = [new Icon(FontAwesome.Cube) { Size = 11, Color = Color.TextMuted }, .. QuickDice.Select(DieButton)]
+        };
+    }
 
-        var atBottom = scroll.Offset.Y >= scroll.MaxOffset.Y - 24;
-        var resized = MathF.Abs(scroll.ContentSize.Y - _lastContentHeight) > 0.5f || MathF.Abs(scroll.ViewportSize.Y - _lastViewportHeight) > 0.5f;
-        _lastContentHeight = scroll.ContentSize.Y;
-        _lastViewportHeight = scroll.ViewportSize.Y;
+    private Widget DieButton(int sides)
+    {
+        return new Button($"d{sides}")
+        {
+            Small = true,
+            Tooltip = Bind<string?>(() => $"Roll 1d{sides} as {Speaker}"),
+            OnClick = () => _campaign.Roll(Speaker, $"1d{sides}", null)
+        };
+    }
 
-        if (_pendingScroll > 0)
+    private Widget Composer()
+    {
+        return new Row
         {
-            _pendingScroll = atBottom ? 0 : _pendingScroll - 1;
-        }
-        else if (_stick && resized && !atBottom)
-        {
-            _follow = true;
-        }
-        else
-        {
-            _stick = atBottom;
-        }
-
-        if (_stick)
-        {
-            _unread = 0;
-        }
+            Padding = (8, 0, 8, 6),
+            Gap = 6,
+            Children =
+            [
+                _speaker,
+                _input,
+                new Button { Icon = FontAwesome.PaperPlane, Tone = Tone.Primary, Tooltip = "Send (Enter)", OnClick = Submit }
+            ]
+        };
     }
 
     private bool Matches(ChatMessage message)
@@ -245,160 +195,179 @@ public sealed class ChatView
         };
     }
 
-    private void DrawMessage(ChatMessage message)
+    private Widget MessageRow(ChatMessage message)
     {
-        var theme = Ui.Theme;
-        var id = Ui.Id(_logId, message.Id);
-        var interaction = Ui.Interaction(id);
-        if (interaction.RightClicked)
+        var row = message.Kind switch
         {
-            OpenMessageMenu(message);
-        }
-
-        var hover = interaction.Hovered ? theme.Hover : default;
-        switch (message.Kind)
-        {
-            case MessageKind.System:
-                using (Ui.Row(id).Padding(8, 5).Gap(8).AlignItems(UIAlign.Start).CornerRadius(6).Background(hover).Open())
-                {
-                    using (Ui.Row().Padding(0, 2, 0, 0).Shrink(0).Open())
-                    {
-                        Im.Icon(FontAwesome.CircleInfo, 11, theme.TextMuted);
-                    }
-
-                    using (Ui.Column().Fill().Open())
-                    {
-                        Im.Para(message.Text, 12, theme.TextMuted);
-                    }
-                }
-
-                break;
-            case MessageKind.Roll:
-                DrawRoll(id, message, interaction.Hovered);
-                break;
-            default:
-                var whisper = message.Kind == MessageKind.Whisper;
-                var background = whisper ? Im.Alpha(UIColor.Hex(0xA77BF3FF), interaction.Hovered ? (byte)46 : (byte)30) : hover;
-                using (Ui.Column(id).Padding(8, 6).Gap(3).CornerRadius(6).Background(background).Open())
-                {
-                    using (Ui.Row().Gap(6).AlignItems(UIAlign.Center).Open())
-                    {
-                        Im.Line(message.Speaker, 13, message.SpeakerColor);
-                        if (whisper)
-                        {
-                            Im.Icon(FontAwesome.Envelope, 10, theme.TextMuted);
-                            Im.Line(message.Target ?? "", 12, theme.TextMuted);
-                        }
-                        else if (message.Kind == MessageKind.OutOfCharacter)
-                        {
-                            Im.Badge("OOC", theme.SurfaceAlt, theme.TextMuted);
-                        }
-
-                        Im.Spacer();
-                        Im.Line(message.TimeText, 11, theme.TextDisabled);
-                    }
-
-                    if (message.Kind == MessageKind.Emote)
-                    {
-                        Im.Para(message.Text, 14, Im.Mix(message.SpeakerColor, theme.Text, 0.45f));
-                    }
-                    else
-                    {
-                        Im.Para(message.Text, 14, message.Kind == MessageKind.OutOfCharacter ? theme.TextMuted : theme.Text);
-                    }
-                }
-
-                break;
-        }
+            MessageKind.System => SystemRow(message),
+            MessageKind.Roll => RollCard(message),
+            _ => TalkRow(message)
+        };
+        row.ContextMenu = () => MessageMenu(message);
+        return row;
     }
 
-    private void DrawRoll(uint id, ChatMessage message, bool hovered)
+    private static Panel SystemRow(ChatMessage message)
     {
-        var theme = Ui.Theme;
+        return new Row
+        {
+            Padding = (8, 5),
+            Gap = 8,
+            Align = UIAlign.Start,
+            Radius = 6,
+            HoverBackground = Color.Hover,
+            Children =
+            [
+                new Row { Padding = (0, 2, 0, 0), Children = [new Icon(FontAwesome.CircleInfo) { Size = 11, Color = Color.TextMuted }] },
+                new Paragraph(message.Text, TextStyle.Sized(12, Color.TextMuted)) { Flex = 1 }
+            ]
+        };
+    }
+
+    private static Panel TalkRow(ChatMessage message)
+    {
+        var whisper = message.Kind == MessageKind.Whisper;
+        var header = new Row { Gap = 6, Children = [new Label(message.Speaker, TextStyle.Sized(13, message.SpeakerColor))] };
+        if (whisper)
+        {
+            header.Children.Add(new Icon(FontAwesome.Envelope) { Size = 10, Color = Color.TextMuted });
+            header.Children.Add(new Label(message.Target ?? "", TextStyle.Sized(12, Color.TextMuted)));
+        }
+        else if (message.Kind == MessageKind.OutOfCharacter)
+        {
+            header.Children.Add(Kit.Badge("OOC", Color.SurfaceAlt, Color.TextMuted));
+        }
+
+        header.Children.Add(new Spacer());
+        header.Children.Add(TimeLabel(message));
+
+        var body = message.Kind == MessageKind.Emote
+            ? new Paragraph(message.Text, TextStyle.Sized(14)) { Color = Bind(() => Color.Mix(message.SpeakerColor, Color.Text, 0.45f)) }
+            : new Paragraph(message.Text, TextStyle.Sized(14, message.Kind == MessageKind.OutOfCharacter ? Color.TextMuted : Color.Text));
+
+        return new Column
+        {
+            Padding = (8, 6),
+            Gap = 3,
+            Radius = 6,
+            Background = whisper ? WhisperTint.WithAlpha(30) : Color.Transparent,
+            HoverBackground = whisper ? WhisperTint.WithAlpha(46) : Color.Hover,
+            Children = [header, body]
+        };
+    }
+
+    private static Panel RollCard(ChatMessage message)
+    {
         var roll = message.Roll!;
-        var result = roll.IsCritical ? Im.Good : roll.IsFumble ? Im.Bad : theme.Accent;
-        using (Ui.Column(id)
-                   .Margin(0, 3)
-                   .Padding(10, 8)
-                   .Gap(6)
-                   .Background(hovered ? theme.Hover : theme.SurfaceAlt)
-                   .Border(message.SpeakerColor, new UIEdges(3, 0, 0, 0))
-                   .CornerRadius(6)
-                   .Open())
+        var result = roll.IsCritical ? Palette.Good : roll.IsFumble ? Palette.Bad : Color.Accent;
+        var dice = new Row
         {
-            using (Ui.Row().Gap(6).AlignItems(UIAlign.Center).Open())
-            {
-                Im.Line(message.Speaker, 13, message.SpeakerColor);
-                Im.Spacer();
-                Im.Line(message.TimeText, 11, theme.TextDisabled);
-            }
-
-            using (Ui.Row().Gap(10).AlignItems(UIAlign.Center).Open())
-            {
-                using (Ui.Column().Fill().Gap(5).Open())
-                {
-                    Im.Line(message.Label ?? "Roll", 13, theme.Text);
-                    using (Ui.Row().Wrap().Gap(4).LineGap(4).AlignItems(UIAlign.Center).Open())
-                    {
-                        Im.Line(roll.Formula, 12, theme.TextMuted);
-                        foreach (var die in roll.Dice)
-                        {
-                            var color = die.Sides == 20 && die.IsMax ? Im.Good : die.Sides == 20 && die.IsMin ? Im.Bad : theme.BorderStrong;
-                            using (Ui.Row().MinWidth(22).Height(20).Padding(5, 0).Center().Border(color, 1).CornerRadius(4).Open())
-                            {
-                                Im.Line(Fmt.Int(die.Value), 11, theme.Text);
-                            }
-                        }
-
-                        if (roll.Modifier != 0)
-                        {
-                            Im.Line(Fmt.Sign(roll.Modifier), 12, theme.TextMuted);
-                        }
-                    }
-                }
-
-                var totalId = Ui.Id(id, 7);
-                using (Ui.Column(totalId).MinWidth(54).Height(46).Padding(8, 0).Shrink(0).Center()
-                           .Background(Im.Alpha(result, 36)).Border(result, 1.5f).CornerRadius(8).Open())
-                {
-                    Im.Line(Fmt.Int(Math.Max(0, roll.Total)), 22, theme.Text);
-                }
-
-                if (Ui.Interaction(totalId).Hovered)
-                {
-                    Ui.Tooltip(totalId, roll.Breakdown());
-                }
-            }
-
-            if (roll.IsCritical || roll.IsFumble)
-            {
-                Im.Line(roll.IsCritical ? "Natural 20!" : "Natural 1…", 12, result);
-            }
+            Wrap = true,
+            Gap = 4,
+            LineGap = 4,
+            Children = [new Label(roll.Formula, TextStyle.Sized(12, Color.TextMuted)), .. roll.Dice.Select(DieChip)]
+        };
+        if (roll.Modifier != 0)
+        {
+            dice.Children.Add(new Label(Fmt.Sign(roll.Modifier), TextStyle.Sized(12, Color.TextMuted)));
         }
+
+        var card = new Column
+        {
+            Margin = (0, 3),
+            Padding = (10, 8),
+            Gap = 6,
+            Background = Color.SurfaceAlt,
+            HoverBackground = Color.Hover,
+            Border = Border.Left(message.SpeakerColor, 3),
+            Radius = 6,
+            Children =
+            [
+                new Row { Gap = 6, Children = [new Label(message.Speaker, TextStyle.Sized(13, message.SpeakerColor)), new Spacer(), TimeLabel(message)] },
+                new Row
+                {
+                    Gap = 10,
+                    Children =
+                    [
+                        new Column { Flex = 1, Gap = 5, Children = [new Label(message.Label ?? "Roll", TextStyle.Sized(13)), dice] },
+                        new Column
+                        {
+                            MinWidth = 54,
+                            Height = 46,
+                            Padding = (8, 0),
+                            Justify = UIJustify.Center,
+                            Align = UIAlign.Center,
+                            Background = result.WithAlpha(36),
+                            Border = new Border(result, 1.5f),
+                            Radius = 8,
+                            Tooltip = Bind<string?>(() => roll.Breakdown()),
+                            Children = [new Label(Fmt.Int(Math.Max(0, roll.Total)), TextStyle.Sized(22))]
+                        }
+                    ]
+                }
+            ]
+        };
+        if (roll.IsCritical || roll.IsFumble)
+        {
+            card.Children.Add(new Label(roll.IsCritical ? "Natural 20!" : "Natural 1…", TextStyle.Sized(12, result)));
+        }
+
+        return card;
     }
 
-    private void OpenMessageMenu(ChatMessage message)
+    private static Widget DieChip(Die die)
     {
-        _messageMenu.ClearItems();
-        _messageMenu.Add("Copy text", () =>
+        var color = die.Sides == 20 && die.IsMax ? Palette.Good : die.Sides == 20 && die.IsMin ? Palette.Bad : Color.BorderStrong;
+        return new Row
         {
-            using var text = new StringView.Pinned(message.Text);
-            Clipboard.SetText(text);
-        }, FontAwesome.Copy);
+            MinWidth = 22,
+            Height = 20,
+            Padding = (5, 0),
+            Justify = UIJustify.Center,
+            Border = color,
+            Radius = 4,
+            Children = [new Label(Fmt.Int(die.Value), TextStyle.Sized(11))]
+        };
+    }
+
+    private static Label TimeLabel(ChatMessage message)
+    {
+        return new Label(message.TimeText, TextStyle.Sized(11, Color.TextDisabled));
+    }
+
+    private Menu MessageMenu(ChatMessage message)
+    {
+        var items = new WidgetList
+        {
+            new MenuItem("Copy text", FontAwesome.Copy)
+            {
+                OnClick = () =>
+                {
+                    using var text = new StringView.Pinned(message.Text);
+                    Clipboard.SetText(text);
+                }
+            }
+        };
         if (message.Roll is { } roll)
         {
-            _messageMenu.Add("Roll again", () => _campaign.Roll(message.Speaker, roll.Formula, message.Label), FontAwesome.RotateRight);
+            items.Add(new MenuItem("Roll again", FontAwesome.RotateRight) { OnClick = () => _campaign.Roll(message.Speaker, roll.Formula, message.Label) });
         }
 
-        _messageMenu.AddSeparator();
-        _messageMenu.Add("Delete message", () => _campaign.Chat.Remove(message), FontAwesome.TrashCan);
-        _messageMenu.ShowAt(Ui.PointerPosition);
+        items.Add(new MenuSeparator());
+        items.Add(new MenuItem("Delete message", FontAwesome.TrashCan) { OnClick = () => _campaign.Chat.Remove(message) });
+        return new Menu { Items = items };
+    }
+
+    private void JumpToEnd()
+    {
+        _unread = 0;
+        _log.ScrollToEnd();
     }
 
     private void ConfirmClear()
     {
         var count = _campaign.Chat.Messages.Count;
-        _confirm.Show("Clear the chat log?", $"This removes all {count} messages for everyone at the table. Rolls already made stay made.", "Clear log", () =>
+        Dialogs.Confirm("Clear the chat log?", $"This removes all {count} messages for everyone at the table. Rolls already made stay made.", "Clear log", Tone.Danger, () =>
         {
             _campaign.Chat.Clear();
             _campaign.Chat.System("The chat log was cleared.");
@@ -407,15 +376,14 @@ public sealed class ChatView
 
     private void Submit()
     {
-        var text = _input.Text.Trim();
+        var text = _input.Text.Value.Trim();
         if (text.Length == 0)
         {
             return;
         }
 
         _input.Clear();
-        _stick = true;
-        _follow = true;
+        JumpToEnd();
         Execute(text);
     }
 

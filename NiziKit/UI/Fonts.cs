@@ -1,40 +1,14 @@
-using System.IO.Compression;
 using System.Reflection;
-using System.Runtime.InteropServices;
 using DenOfIz;
 
 namespace NiziKit.UI;
 
 public static class Fonts
 {
-    private sealed class FontEntry : IDisposable
-    {
-        public required Font Font;
-        public FontAsset? Asset;
-        public FontAssetReader? AssetReader;
-        public DenOfIz.BinaryReader? Reader;
-        public GCHandle Data;
-
-        public void Dispose()
-        {
-            Font.Dispose();
-            Asset?.Dispose();
-            AssetReader?.Dispose();
-            Reader?.Dispose();
-            if (Data.IsAllocated)
-            {
-                Data.Free();
-            }
-        }
-    }
-
-    private static FontLibrary? _library;
-    private static readonly Dictionary<ushort, FontEntry> Entries = new();
-    private static readonly List<FontEntry> Removed = new();
+    private static readonly Dictionary<ushort, Font> Entries = new();
+    private static readonly List<Font> Removed = new();
 
     public const ushort DefaultFontId = 0;
-
-    public static FontLibrary Library => _library ??= new FontLibrary();
 
     public static bool IsRegistered(ushort fontId)
     {
@@ -43,185 +17,48 @@ public static class Fonts
 
     public static bool TryGet(ushort fontId, out Font font)
     {
-        if (Entries.TryGetValue(fontId, out var entry))
-        {
-            font = entry.Font;
-            return true;
-        }
-
-        font = null!;
-        return false;
+        return Entries.TryGetValue(fontId, out font!);
     }
 
-    public static Font Load(string path, ushort fontId)
+    public static Font Load(string path, ushort fontId, uint faceIndex = 0)
     {
         if (!File.Exists(path))
         {
             throw new FileNotFoundException($"Font file not found: {path}", path);
         }
 
-        if (path.EndsWith(".dzfont", StringComparison.OrdinalIgnoreCase))
-        {
-            return LoadAsset(File.ReadAllBytes(path), fontId);
-        }
+        using var pinned = new StringView.Pinned(Path.GetFullPath(path));
+        return RegisterLoaded(Font.CreateFromPath(pinned, faceIndex), fontId, path);
+    }
 
-        if (path.EndsWith(".dzfont.br", StringComparison.OrdinalIgnoreCase))
-        {
-            return LoadCompressedAsset(File.OpenRead(path), fontId);
-        }
-
-        Font font;
-        using (var pinned = new StringView.Pinned(Path.GetFullPath(path)))
-        {
-            font = Library.LoadFontFromPath(pinned);
-        }
-
-        if ((ulong)font == 0)
-        {
-            throw new InvalidOperationException($"Failed to import font: {path}");
-        }
-
-        Register(fontId, new FontEntry { Font = font });
-        return font;
+    public static Font Load(ReadOnlySpan<byte> data, ushort fontId, uint faceIndex = 0)
+    {
+        return RegisterLoaded(Font.Create(data, faceIndex), fontId, "font data");
     }
 
     public static Font LoadEmbedded(Assembly assembly, string resourceName, ushort fontId)
     {
-        using var stream = assembly.GetManifestResourceStream(resourceName);
-        if (stream == null)
-        {
-            throw new InvalidOperationException($"Embedded resource '{resourceName}' not found in {assembly.GetName().Name}");
-        }
-
-        if (resourceName.EndsWith(".dzfont.br", StringComparison.OrdinalIgnoreCase))
-        {
-            return LoadCompressedAsset(stream, fontId);
-        }
-
-        if (resourceName.EndsWith(".dzfont", StringComparison.OrdinalIgnoreCase))
-        {
-            var data = new byte[stream.Length];
-            stream.ReadExactly(data);
-            return LoadAsset(data, fontId);
-        }
-
-        throw new InvalidOperationException($"Unsupported embedded font format '{resourceName}'. Embed a .dzfont or .dzfont.br produced by Fonts.Export.");
-    }
-
-    public static Font LoadCompressedAsset(Stream compressed, ushort fontId)
-    {
-        using var owned = compressed;
-        using var brotli = new BrotliStream(owned, CompressionMode.Decompress);
-        using var buffer = new MemoryStream();
-        brotli.CopyTo(buffer);
-        return LoadAsset(buffer.ToArray(), fontId);
-    }
-
-    public static Font LoadAsset(byte[] assetData, ushort fontId)
-    {
-        var handle = GCHandle.Alloc(assetData, GCHandleType.Pinned);
-        var view = new ByteArrayView { Elements = handle.AddrOfPinnedObject(), NumElements = (ulong)assetData.Length };
-        var reader = DenOfIz.BinaryReader.CreateFromData(view, new BinaryReaderDesc { NumBytes = 0 });
-        var assetReader = new FontAssetReader(new FontAssetReaderDesc { Reader = reader });
-        var asset = assetReader.Read();
-        var font = Library.LoadFontFromDesc(new FontDesc { FontAsset = asset });
-        if ((ulong)font == 0)
-        {
-            assetReader.Dispose();
-            reader.Dispose();
-            handle.Free();
-            throw new InvalidOperationException("Failed to load font asset");
-        }
-
-        Register(fontId, new FontEntry { Font = font, Asset = asset, AssetReader = assetReader, Reader = reader, Data = handle });
-        return font;
-    }
-
-    public static Font ImportTtf(string ttfPath, ushort fontId, params UnicodeRange[] ranges)
-    {
-        return LoadAsset(ImportTtfToAsset(ttfPath, ranges), fontId);
-    }
-
-    public static void Export(string ttfPath, string outputPath, params UnicodeRange[] ranges)
-    {
-        var asset = ImportTtfToAsset(ttfPath, ranges);
-        using var output = File.Create(outputPath);
-        if (outputPath.EndsWith(".br", StringComparison.OrdinalIgnoreCase))
-        {
-            using var brotli = new BrotliStream(output, CompressionLevel.SmallestSize, true);
-            brotli.Write(asset);
-        }
-        else
-        {
-            output.Write(asset);
-        }
-    }
-
-    public static byte[] ImportTtfToAsset(string ttfPath, params UnicodeRange[] ranges)
-    {
-        if (!File.Exists(ttfPath))
-        {
-            throw new FileNotFoundException($"Font file not found: {ttfPath}", ttfPath);
-        }
-
-        var handle = ranges.Length > 0 ? GCHandle.Alloc(ranges, GCHandleType.Pinned) : default;
-        using var container = new BinaryContainer();
-        using var source = new StringView.Pinned(Path.GetFullPath(ttfPath));
-        using var importer = new FontImporter();
-        try
-        {
-            var desc = new FontImportDesc
-            {
-                SourceFilePath = source,
-                InitialFontSize = 32,
-                AtlasWidth = 2048,
-                AtlasHeight = 2048,
-                TargetContainer = container
-            };
-            if (ranges.Length > 0)
-            {
-                desc.CustomRanges = UnicodeRangeArray.FromPinned(handle, ranges.Length);
-            }
-
-            var result = importer.Import(desc);
-            if (result.ResultCode != ImporterResultCode.Success)
-            {
-                throw new InvalidOperationException($"Font import failed for {ttfPath}: {result.ErrorMessage}");
-            }
-        }
-        finally
-        {
-            if (handle.IsAllocated)
-            {
-                handle.Free();
-            }
-        }
-
-        var view = container.GetData();
-        var data = new byte[view.NumElements];
-        Marshal.Copy(view.Elements, data, 0, data.Length);
-        return data;
+        using var stream = assembly.GetManifestResourceStream(resourceName)
+            ?? throw new InvalidOperationException($"Embedded resource '{resourceName}' not found in {assembly.GetName().Name}");
+        var data = new byte[stream.Length];
+        stream.ReadExactly(data);
+        return RegisterLoaded(Font.Create(data), fontId, resourceName);
     }
 
     public static void Register(ushort fontId, Font font)
     {
-        Register(fontId, new FontEntry { Font = font });
-    }
-
-    private static void Register(ushort fontId, FontEntry entry)
-    {
-        if (Entries.Remove(fontId, out var existing) && !ReferenceEquals(existing.Font, entry.Font))
+        Ui.Native.AddFont(fontId, font);
+        if (Entries.TryGetValue(fontId, out var existing) && !ReferenceEquals(existing, font))
         {
             Release(existing);
         }
 
-        Ui.Native.AddFont(fontId, entry.Font);
-        Entries[fontId] = entry;
+        Entries[fontId] = font;
     }
 
     public static void Unload(ushort fontId)
     {
-        if (!Entries.Remove(fontId, out var entry))
+        if (!Entries.Remove(fontId, out var font))
         {
             return;
         }
@@ -231,50 +68,51 @@ public static class Fonts
             Ui.Native.RemoveFont(fontId);
         }
 
-        Release(entry);
+        Release(font);
     }
 
-    internal static void ReleaseRemoved()
+    private static Font RegisterLoaded(Font font, ushort fontId, string source)
     {
-        if (Removed.Count == 0)
+        if ((ulong)font == 0)
         {
-            return;
+            throw new InvalidOperationException($"Failed to load font: {source}");
         }
 
-        foreach (var entry in Removed)
+        Register(fontId, font);
+        return font;
+    }
+
+    // The UI borrows fonts; a replaced or removed font stays alive until the UI applies the change in its next BeginFrame.
+    internal static void ReleaseRemoved()
+    {
+        foreach (var font in Removed)
         {
-            entry.Dispose();
+            font.Dispose();
         }
 
         Removed.Clear();
     }
 
-    private static void Release(FontEntry entry)
+    private static void Release(Font font)
     {
-        if (!Ui.IsInitialized)
+        if (Ui.IsInitialized)
         {
-            entry.Dispose();
-            return;
+            Removed.Add(font);
         }
-
-        Removed.Add(entry);
+        else
+        {
+            font.Dispose();
+        }
     }
 
     internal static void Shutdown()
     {
-        foreach (var entry in Entries.Values)
+        foreach (var font in Entries.Values)
         {
-            entry.Dispose();
+            font.Dispose();
         }
 
-        foreach (var entry in Removed)
-        {
-            entry.Dispose();
-        }
-
+        ReleaseRemoved();
         Entries.Clear();
-        Removed.Clear();
-        _library?.Dispose();
-        _library = null;
     }
 }

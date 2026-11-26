@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Numerics;
-using NiziKit.UI.Widgets;
 using Semaphore = DenOfIz.Semaphore;
 
 namespace UIGallery;
@@ -31,9 +30,10 @@ internal sealed class GalleryGame() : Game(new GameDesc { Title = "NiziKit UI Ga
         _visualizer = new Visualizer();
         _pattern = PatternTexture.Create(Environment.GetEnvironmentVariable("UIGALLERY_AUTOALIGN") == "1");
         _gallery = new Gallery(() => _visualizer.Texture, _pattern);
+        Ui.Root = _gallery.Root;
         if (_page is >= 1 and <= 6)
         {
-            _gallery.Tabs.SelectedIndex = _page - 1;
+            _gallery.Tabs.Select((GalleryPage)(_page - 1));
         }
 
         _statsAllocated = GC.GetAllocatedBytesForCurrentThread();
@@ -48,9 +48,7 @@ internal sealed class GalleryGame() : Game(new GameDesc { Title = "NiziKit UI Ga
         _frame.BeginFrame();
         var (_, visualizerReady) = _visualizer.Render(dt);
 
-        Ui.BeginFrame(dt);
-        _gallery.Draw();
-        Ui.EndFrame();
+        Ui.Update(dt);
 
         if (_renderToTexture)
         {
@@ -153,19 +151,15 @@ internal sealed class GalleryGame() : Game(new GameDesc { Title = "NiziKit UI Ga
                     _gallery.NotesArea.Select(52, 73);
                     break;
                 case 3:
-                    _gallery.Files.SelectedIndex = 500;
-                    _gallery.Files.ScrollToSelected();
+                    _gallery.SelectFile(500);
                     break;
                 case 4 when _script == 2:
-                    _gallery.Dialog.ShowCentered();
+                    _gallery.Dialog.Show();
                     break;
                 case 4:
-                    _gallery.InfoPopup.Open(_gallery.InfoButton);
-                    if (Ui.TryGetRect(_gallery.InfoButton.Id, out var button))
-                    {
-                        _gallery.OpenContextMenuAt(new Vector2(button.X + 560, button.Y + 60));
-                    }
-
+                    _gallery.InfoPopup.Show(_gallery.InfoButton);
+                    var button = _gallery.InfoButton.Bounds;
+                    _gallery.OpenContextMenuAt(new Vector2(button.X + 560, button.Y + 60));
                     break;
             }
         }
@@ -181,6 +175,7 @@ internal sealed class GalleryGame() : Game(new GameDesc { Title = "NiziKit UI Ga
 
     private static Vector2? Center(Widget widget)
     {
-        return widget.TryGetBounds(out var rect) ? new Vector2(rect.X + rect.Width * 0.5f, rect.Y + rect.Height * 0.5f) : null;
+        var rect = widget.Bounds;
+        return rect.Width > 0 ? rect.Center : null;
     }
 }

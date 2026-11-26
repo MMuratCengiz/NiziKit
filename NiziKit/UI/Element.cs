@@ -4,8 +4,25 @@ using DenOfIz;
 
 namespace NiziKit.UI;
 
-public struct Element
+internal struct Element
 {
+    public static Element Box(uint id = 0)
+    {
+        return new Element(id);
+    }
+
+    public static Element Row(uint id = 0)
+    {
+        return new Element(id);
+    }
+
+    public static Element Column(uint id = 0)
+    {
+        var element = new Element(id);
+        element._desc.Layout.Direction = UIDirection.Column;
+        return element;
+    }
+
     private UIElementDesc _desc;
 
     public Element(uint id)
@@ -539,7 +556,7 @@ public struct Element
     }
 }
 
-public readonly ref struct Scope
+internal readonly ref struct Scope
 {
     internal Scope(uint id)
     {

@@ -73,13 +73,9 @@ public sealed class Character
     public Character()
     {
         Id = ++_nextId;
-        TokenId = Ui.Id("Token", Id);
     }
 
     public uint Id { get; }
-
-    /// <summary>Element id of the token on the map, stable for life so its transitions and interaction survive reordering.</summary>
-    public uint TokenId { get; }
 
     public required string Name { get; init; }
     public required string Initials { get; init; }

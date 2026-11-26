@@ -16,4 +16,8 @@
         <ProjectReference Include="../../NiziKit/NiziKit.csproj" />
     </ItemGroup>
 
+    <ItemGroup>
+      <None Remove="DenOfIz.log" />
+    </ItemGroup>
+
 </Project>
